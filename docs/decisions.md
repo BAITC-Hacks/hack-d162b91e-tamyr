@@ -93,3 +93,12 @@ domain's tools can be built without importing the registry that imports them (a 
 → `get_node`, default → `get_top_nodes` + `get_node` on #1. The sources of «этих» are the gids the
 question names, else the gids of the previous reply, else a visible `get_top_nodes(5)` call. Chosen
 over: a fixed script by message index, which breaks the moment the jury asks out of order.
+
+**15:53 — Live run on `gpt-6-luna` (Responses): all three demo questions answered through tools.**
+After `pnpm pipeline` on Саян's model (`1977adf`; 7.9 s; 1333 peripheral, 639 terminal, 110
+consolidator, 72 coordinator, 57 transit, 37 distributor; 84 clusters). One conversation, three
+turns: «кого первым» → `get_top_nodes(10)` + five `get_node` (21 s); «кто собирает с этих пятерых»
+→ `find_collectors` on the five gids of the previous answer, `maxHops` 3 (11 s); «что если убрать
+топ-5» → `get_top_nodes(5)` + `simulate_removal` (9 s; 35 → 122 components, largest 1 877 → 1 733).
+No tool errors, every number traceable to a result, phrased as hypotheses. The first turn is the slow
+one (six calls): acceptable live, and the mock stays the default for reviewers.
