@@ -1,10 +1,11 @@
 import { type ChatMessage, type ChatResponse, type ToolCall } from '@server/agent/model/agent.schema';
+import { getAnalysis } from '@server/graph/usecase/getAnalysis';
 import { type Ctx } from '@server/kernel/ctx';
 import { readEnv } from '@server/kernel/env';
 import 'server-only';
 import { type ChatMessageParam, createClient, type ResponseItem, type ResponsesTool, withRetry } from './client';
 import { runMock } from './mock';
-import { SYSTEM_PROMPT } from './prompt';
+import { systemPrompt } from './prompt';
 import { chatToolDefinitions, executeTool, responsesToolDefinitions } from './tools';
 
 /**
@@ -45,7 +46,20 @@ function contextMessage(ctx: Ctx): string {
 	return `Today is ${ctx.now.toISOString().slice(0, 10)}.`;
 }
 
-const EXHAUSTED = 'I could not finish this request. Please rephrase it, or ask a person who can help directly.';
+/**
+ * The prompt carries the dataset's real size. A broken `analysis.json` must not kill the turn here:
+ * the tools will each report it, which is where the panel shows it.
+ */
+function promptFor(ctx: Ctx): string {
+	try {
+		return systemPrompt(getAnalysis(ctx)?.stats ?? null);
+	} catch {
+		return systemPrompt(null);
+	}
+}
+
+const EXHAUSTED =
+	'Не удалось завершить ответ за отведённое число шагов. Переформулируйте вопрос или сузьте его до конкретных gid.';
 
 // --- the Responses adapter ----------------------------------------------------------------------
 
@@ -69,7 +83,7 @@ async function runResponses(ctx: Ctx, input: AgentInput): Promise<ChatResponse> 
 	];
 
 	const conversation: ResponseItem[] = [
-		{ content: SYSTEM_PROMPT, role: 'system' },
+		{ content: promptFor(ctx), role: 'system' },
 		{ content: contextMessage(ctx), role: 'system' },
 		...input.messages.map((message) => ({ content: message.content, role: message.role })),
 	];
@@ -126,7 +140,7 @@ async function runChat(ctx: Ctx, input: AgentInput): Promise<ChatResponse> {
 	const toolCalls: ToolCall[] = [];
 
 	const conversation: ChatMessageParam[] = [
-		{ content: SYSTEM_PROMPT, role: 'system' },
+		{ content: promptFor(ctx), role: 'system' },
 		{ content: contextMessage(ctx), role: 'system' },
 		...input.messages.map((message) => ({ content: message.content, role: message.role })),
 	];

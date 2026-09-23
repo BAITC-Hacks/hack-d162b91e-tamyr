@@ -25,7 +25,7 @@ export interface CurrentTime {
 /** Reads the clock through `ctx`, so a test pins it. An unknown zone throws a RangeError. */
 function currentTime(ctx: Ctx, input: { timeZone?: string | undefined }): CurrentTime {
 	const timeZone = input.timeZone ?? 'UTC';
-	const local = new Intl.DateTimeFormat('en-GB', { dateStyle: 'full', timeStyle: 'short', timeZone }).format(ctx.now);
+	const local = new Intl.DateTimeFormat('ru-RU', { dateStyle: 'full', timeStyle: 'short', timeZone }).format(ctx.now);
 
 	return { iso: ctx.now.toISOString(), local, timeZone };
 }
@@ -43,7 +43,7 @@ export const TOOLS: readonly ToolSpec[] = [
 		description:
 			"Returns the current date and time. Call this whenever an answer depends on today's date or the time of day — never assume it.",
 		handler: (ctx, args) => currentTime(ctx, args),
-		label: 'Check the clock',
+		label: 'Часы сервера',
 		name: 'get_current_time',
 		parameters: z.object({
 			timeZone: z.string().min(1).optional().describe('IANA time zone, for example Asia/Almaty. Defaults to UTC.'),
@@ -111,9 +111,9 @@ export function executeTool(ctx: Ctx, input: { args: Record<string, unknown>; na
 		return {
 			arguments: input.args,
 			durationMs: elapsed(),
-			label: 'Unknown tool',
+			label: 'Неизвестный инструмент',
 			name: input.name,
-			result: `There is no tool named ${input.name}.`,
+			result: `Инструмента ${input.name} нет.`,
 			status: 'error',
 		};
 	}
@@ -126,7 +126,7 @@ export function executeTool(ctx: Ctx, input: { args: Record<string, unknown>; na
 		return {
 			...base,
 			durationMs: elapsed(),
-			result: cause instanceof Error ? cause.message : 'The tool failed to run.',
+			result: cause instanceof Error ? cause.message : 'Инструмент не сработал.',
 			status: 'error',
 		};
 	}

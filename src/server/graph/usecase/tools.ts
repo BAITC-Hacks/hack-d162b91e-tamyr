@@ -1,5 +1,5 @@
 import { defineTool, type ToolSpec } from '@server/agent/usecase/defineTool';
-import { type Analysis, gidSchema, ROLES, type TopRow } from '@server/graph/model/graph.schema';
+import { type Analysis, gidSchema, type NodeCard, ROLES, type TopRow } from '@server/graph/model/graph.schema';
 import { rankTop } from '@server/graph/model/priority';
 import { coverageGaps, findCollectors, nodeCard, simulateRemoval, traceFlow } from '@server/graph/model/queries';
 import { getAnalysis } from '@server/graph/usecase/getAnalysis';
@@ -33,6 +33,42 @@ export type AnalysisSource = (ctx: Ctx) => Analysis | null;
 const COLLECTORS_SHOWN = 20;
 const CLUSTER_MEMBERS_SHOWN = 10;
 const FLOW_EDGES_SHOWN = 60;
+
+/**
+ * Scores and ratios as the model should quote them. A cheap model copies `2.7437165025037142`
+ * verbatim however the prompt asks; a result that is already `2.74` cannot be quoted wrong. The
+ * centralities are tiny, so they keep three significant digits rather than two decimals.
+ */
+function fixed(value: number): number {
+	return Math.round(value * 100) / 100;
+}
+
+function significant(value: number): number {
+	return Number(value.toPrecision(3));
+}
+
+function rowForModel(row: TopRow): TopRow {
+	return { ...row, priorityScore: fixed(row.priorityScore) };
+}
+
+function cardForModel(card: NodeCard): NodeCard {
+	const { node } = card;
+
+	return {
+		...card,
+		node: {
+			...node,
+			authority: significant(node.authority),
+			betweenness: significant(node.betweenness),
+			fastTransitShare: fixed(node.fastTransitShare),
+			hub: significant(node.hub),
+			pagerank: significant(node.pagerank),
+			passThrough: node.passThrough === null ? null : fixed(node.passThrough),
+			priorityScore: fixed(node.priorityScore),
+			roleScore: fixed(node.roleScore),
+		},
+	};
+}
 
 const gidArg = gidSchema.describe(
 	'A client gid: the full digit string, exactly as a tool returned it. Never a number.',
@@ -82,7 +118,8 @@ function rankedAll(a: Analysis): TopRow[] {
 
 function topNodes(a: Analysis, input: { clusterId?: number | undefined; limit: number; role?: string | undefined }) {
 	if (input.role === undefined && input.clusterId === undefined) {
-		return { rows: a.top.slice(0, input.limit), totalMatching: a.top.length };
+		// Every node is ranked, not only the 50 the list stores: «№ 1 из 2 248» is the true claim.
+		return { rows: a.top.slice(0, input.limit).map(rowForModel), totalMatching: a.nodes.length };
 	}
 
 	const clusterOf = new Map(a.nodes.map((node) => [node.gid, node.clusterId]));
@@ -92,7 +129,7 @@ function topNodes(a: Analysis, input: { clusterId?: number | undefined; limit: n
 			(input.clusterId === undefined || clusterOf.get(row.gid) === input.clusterId),
 	);
 
-	return { rows: matching.slice(0, input.limit), totalMatching: matching.length };
+	return { rows: matching.slice(0, input.limit).map(rowForModel), totalMatching: matching.length };
 }
 
 function cluster(a: Analysis, clusterId: number) {
@@ -176,7 +213,7 @@ export function graphTools(load: AnalysisSource): ToolSpec[] {
 			handler: (ctx, args) => {
 				const card = nodeCard(loaded(load, ctx), args.gid);
 
-				return card ?? refuseUnknown([args.gid]);
+				return card === null ? refuseUnknown([args.gid]) : cardForModel(card);
 			},
 			label: 'Карточка узла',
 			name: 'get_node',
@@ -203,8 +240,10 @@ export function graphTools(load: AnalysisSource): ToolSpec[] {
 					.int()
 					.min(1)
 					.max(4)
-					.default(3)
-					.describe('How far to follow the money, 1–4. Defaults to 3.'),
+					// 2, not 3: on the real data five sources share 581 receivers within 3 hops,
+					// which reads as "everybody" rather than as a finding.
+					.default(2)
+					.describe('How far to follow the money, 1–4. Defaults to 2.'),
 			}),
 		}),
 		defineTool({

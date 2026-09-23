@@ -35,7 +35,7 @@ describe('executeTool', () => {
 		const call = executeTool(ctx, { args: {}, name: 'get_current_time' });
 
 		expect(call.status).toBe('ok');
-		expect(call.label).toBe('Check the clock');
+		expect(call.label).toBe('Часы сервера');
 		expect(call.result).toMatchObject({ iso: '2026-01-15T09:30:00.000Z', timeZone: 'UTC' });
 	});
 

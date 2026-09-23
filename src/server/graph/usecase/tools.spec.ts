@@ -84,8 +84,20 @@ describe('get_top_nodes', () => {
 	it('serves the precomputed top list, cut to the limit', () => {
 		const result = run('get_top_nodes', { limit: 2 }) as { rows: unknown[]; totalMatching: number };
 
-		expect(result.rows).toEqual(ANALYSIS.top.slice(0, 2));
-		expect(result.totalMatching).toBe(ANALYSIS.top.length);
+		expect(result.rows.map((row) => (row as { gid: string }).gid)).toEqual(
+			ANALYSIS.top.slice(0, 2).map((row) => row.gid),
+		);
+		expect(result.totalMatching).toBe(ANALYSIS.nodes.length);
+	});
+
+	/** A cheap model quotes whatever digits it is given; a result of 2.74 cannot be quoted as 2.7437…. */
+	it('rounds the scores it hands the model to two decimals', () => {
+		const { rows } = run('get_top_nodes', {}) as { rows: { priorityScore: number }[] };
+		const { node } = run('get_node', { gid: PAYEE }) as { node: { passThrough: number | null; roleScore: number } };
+
+		for (const value of [...rows.map((row) => row.priorityScore), node.roleScore, node.passThrough ?? 0]) {
+			expect(Math.round(value * 100) / 100).toBe(value);
+		}
 	});
 
 	it('defaults to ten rows and refuses more than fifty', () => {
@@ -163,7 +175,7 @@ describe('find_collectors', () => {
 	it('reports the sources, the hop limit and the total alongside the list', () => {
 		expect(run('find_collectors', { gids: [SEED, PAYEE] })).toMatchObject({
 			collectors: expect.any(Array) as unknown,
-			maxHops: 3,
+			maxHops: 2,
 			sources: [SEED, PAYEE],
 			total: expect.any(Number) as unknown,
 		});

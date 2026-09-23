@@ -105,6 +105,22 @@ describe('the scripted agent', () => {
 		expect(result.reply).toContain('компонент');
 	});
 
+	it('removes as many as «топ-N» says, not always five', async () => {
+		const result = await ask('Что если убрать топ-10?');
+
+		expect(result.toolCalls[0]?.arguments).toEqual({ limit: 10 });
+	});
+
+	/** An unrelated question answered with the top list reads as the product ignoring the question. */
+	it('says it did not understand an unrelated question, calls nothing, and offers the demo questions', async () => {
+		const result = await ask('Какая погода в Астане?');
+
+		expect(result.toolCalls).toEqual([]);
+		expect(result.reply).toContain('не распознал');
+
+		for (const question of [FIRST, COLLECT, REMOVE]) expect(result.reply).toContain(question);
+	});
+
 	it('explains one named gid through its card', async () => {
 		const result = await ask(`Почему ${PAYEE} получил такую роль?`);
 

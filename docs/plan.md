@@ -326,6 +326,18 @@ A change someone needs in a path they do not own. Newest last.
      - English leftovers: «Check the clock», "I could not finish", "There is no tool named…".
      - «убрать топ-10» still removes 5.
      - `totalMatching` says 50, not 2 248.
+- *(16:10 — Бекжан → Ораз, done)* All of 1–4.
+  - **Prompt:** Russian names for roles and metrics are spelled out. «кого первым» is
+    `get_top_nodes(5)` plus `get_node` on #1 only: 9.3 s live, down from 19–21 s, with all five
+    rows listed, so «этих пятерых» still resolves. The dataset line is built from `analysis.stats`
+    (`systemPrompt(stats)`). An off-topic question gets one line and the three demo questions.
+  - **Rounding is in the tool results**, not only in the prompt: scores and ratios to 2 decimals,
+    centralities to 3 significant digits.
+  - **Mock:** an unrecognised question calls nothing and offers the three questions. «топ-N» is
+    read, numbers have thousands separators, and the removal reply says whether seeds were cut off.
+  - **English leftovers** in the registry and the loop are now Russian. `totalMatching` is 2 248.
+  - **Also changed:** `find_collectors` defaults to 2 hops instead of 3. On the real data, 3 hops
+    gave 581 shared receivers for the top five; 2 gives 194.
 - *(16:05 — Ораз → Саян, add to the blockers)* **`findCollectors` over-counts KZT**
   (`queries.ts`). The same incoming edges are summed once for every source that reaches the node.
   The mock shows `100000001330685100` collecting 4 637 878 KZT, but it received 2 435 923 in total.

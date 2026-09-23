@@ -26,8 +26,8 @@ import { type CurrentTime, executeTool } from './tools';
  * is read out of a tool result from this turn. Nothing here knows a fact about the graph.
  *
  * It is keyed on intent, crudely, by word stems — the three demo questions first («кого первым»,
- * «кто собирает», «что если убрать»), then the rest of the tools, and the top list as the default,
- * because "whom to check first" is the product's one question.
+ * «кто собирает», «что если убрать»), then the rest of the tools. A question it does not recognise
+ * gets the three demo questions back, never the top list dressed up as an answer.
  */
 
 const ROLE_RU: Record<Role, string> = {
@@ -57,9 +57,28 @@ function gidsIn(text: string): string[] {
 	return [...new Set(text.match(GID_PATTERN) ?? [])];
 }
 
-function kzt(value: number): string {
-	return `${Math.round(value).toLocaleString('ru-RU')} KZT`;
+/** `ru-RU` groups with a no-break space: «1 877», the same as the amounts. */
+function grouped(value: number): string {
+	return Math.round(value).toLocaleString('ru-RU');
 }
+
+function kzt(value: number): string {
+	return `${grouped(value)} KZT`;
+}
+
+/** «топ-10», «топ 3»: how many the question means. Anything else is the demo's five. */
+function topCount(question: string): number {
+	const asked = /топ[\s-]*(\d{1,2})(?!\d)/u.exec(question)?.[1];
+
+	return asked === undefined ? DEFAULT_SOURCES : Math.min(20, Math.max(1, Number(asked)));
+}
+
+const NOT_UNDERSTOOD =
+	'Сценарный режим, модель не подключена: этот вопрос я не распознал. Попробуйте один из демо-вопросов:\n' +
+	'- «Кого проверять первым и почему?»\n' +
+	'- «Кто собирает деньги с этих пятерых?»\n' +
+	'- «Что будет, если убрать топ-5?»\n' +
+	'Или назовите gid, номер кластера, «поток от <gid>» или «чего не хватает в данных».';
 
 /** Evidence is a clause; the reply runs on after it, so it needs a full stop. */
 function sentence(text: string): string {
@@ -134,8 +153,8 @@ function describeNode(node: NodeRow): string {
 	);
 }
 
-function topTurn(turn: Turn): ChatResponse {
-	const top = turn.call('get_top_nodes', { limit: DEFAULT_SOURCES });
+function topTurn(turn: Turn, limit: number): ChatResponse {
+	const top = turn.call('get_top_nodes', { limit });
 	const failed = turn.problem(top);
 
 	if (failed !== null) return failed;
@@ -184,19 +203,21 @@ function collectorsTurn(turn: Turn, messages: readonly ChatMessage[]): ChatRespo
 		);
 
 	return turn.reply(
-		`Кто собирает деньги с ${from.length} узлов — общих получателей в пределах ${maxHops} переводов ${total}:\n` +
+		`Кто собирает деньги с ${from.length} узлов: в пределах ${maxHops} переводов общих получателей ${grouped(total)}, ` +
+			`крупнейшие — признаки консолидации, стоит проверить:\n` +
 			`${lines.join('\n')}\n\n${FOOTER}`,
 	);
 }
 
 function removalTurn(turn: Turn, messages: readonly ChatMessage[]): ChatResponse {
-	const named = gidsIn(lastUserText(messages));
+	const text = lastUserText(messages);
+	const named = gidsIn(text);
 	let removed: string[];
 
 	if (named.length > 0) {
 		removed = named.slice(0, 20);
 	} else {
-		const top = turn.call('get_top_nodes', { limit: DEFAULT_SOURCES });
+		const top = turn.call('get_top_nodes', { limit: topCount(text.toLowerCase()) });
 		const failed = turn.problem(top);
 
 		if (failed !== null) return failed;
@@ -209,12 +230,18 @@ function removalTurn(turn: Turn, messages: readonly ChatMessage[]): ChatResponse
 	if (failed !== null) return failed;
 
 	const { after, before } = impact.result as RemovalImpact;
+	const cut = before.seedsInLargest - after.seedsInLargest;
+	const core =
+		cut > 0
+			? `От крупнейшей компоненты отрезано ${grouped(cut)} seed.`
+			: 'Seed в крупнейшей компоненте не отделились: ядро сети держится и без этих узлов.';
 
 	return turn.reply(
-		`Если убрать ${removed.length} узлов (${removed.join(', ')}):\n` +
-			`- компонент связности: ${before.components} → ${after.components};\n` +
-			`- крупнейшая компонента: ${before.largest} → ${after.largest} узлов;\n` +
-			`- seed в крупнейшей компоненте: ${before.seedsInLargest} → ${after.seedsInLargest}.\n\n${FOOTER}`,
+		`Если убрать ${removed.length} узлов (${removed.join(', ')}) — данные не меняются, это расчёт:\n` +
+			`- компонент связности: ${grouped(before.components)} → ${grouped(after.components)};\n` +
+			`- крупнейшая компонента: ${grouped(before.largest)} → ${grouped(after.largest)} узлов;\n` +
+			`- seed в крупнейшей компоненте: ${grouped(before.seedsInLargest)} → ${grouped(after.seedsInLargest)}.\n` +
+			`${core}\n\n${FOOTER}`,
 	);
 }
 
@@ -326,6 +353,9 @@ export function runMock(ctx: Ctx, input: { messages: readonly ChatMessage[] }): 
 
 	if (first !== undefined) return nodeTurn(turn, first);
 	if (/врем|time|который час/u.test(question)) return clockTurn(turn);
+	if (/перв|приорит|топ|важн|провер|подозр|top|first/u.test(question)) return topTurn(turn, topCount(question));
 
-	return topTurn(turn);
+	// Not a guess: an unrelated question answered with the top list reads as the product ignoring
+	// what was asked. No tool is called, so the panel stays empty — which is the truth.
+	return turn.reply(NOT_UNDERSTOOD);
 }
