@@ -50,3 +50,10 @@ computing on the first request (async inside sync tools).
 Gids are ~1e17, above `Number.MAX_SAFE_INTEGER`. `Number(gid)` silently merges distinct clients.
 
 **14:40 — The UI and all generated text are in Russian. The code is in English.**
+
+**14:55 — Live model: OpenAI `gpt-6-luna` through the Responses adapter.**
+The budget is $50. It costs $0.10 per 1M input tokens and $0.50 per 1M output. It called a
+function tool correctly on the first try with 0 reasoning tokens. A demo turn of ~15k input and
+~1k output tokens costs about $0.002. Chosen over: `gpt-5.6-luna` (2× the price, spends reasoning
+tokens), `gpt-5-mini` (6× the reasoning tokens) and `gpt-6-sol` (20× the price; the fallback only
+if luna's answers are weak). `.env.example` stays on `mock` for reviewers.
