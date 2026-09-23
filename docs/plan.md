@@ -308,6 +308,33 @@ A change someone needs in a path they do not own. Newest last.
 - *(15:35 — Ораз, done)* `predev`/`prebuild` added; `/` renders `getAnalysis(createCtx())` with an
   error state for a broken file. Checked on the real data in headless Edge: 2 248 nodes drawn in
   1.4 s, gid search opens the card, no console errors.
+- *(15:55 — Ораз → Саян, review of `1977adf`)* It builds cleanly and the traps hold: 0 truncated
+  nodes are terminal, transit excludes seeds, and no seed is in the top 50. **Three blockers must be
+  fixed by 16:45**, because the jury's three-gid defence fails on them:
+  1. **`role_score` is 1.00 for almost every node** (`roles.ts:146,158,199`), because it is computed
+     as value ÷ threshold and then clipped. Score how far past the threshold instead, for example
+     `clamp((x − thr) / (k·thr))`. Then `why` stops starting with «сила роли 1,00».
+  2. **The consolidator evidence contradicts itself** (`roles.ts:161`). `seedsUpstream` counts seeds
+     at any distance (1 124 nodes have exactly 7), so «3 плательщика (12 seed)» is misleading. Write
+     «из них N seed» from **direct** payers. Require `passThrough < 0.5` always: 13 consolidators
+     forward more than they receive, for example `…7594394100` «отдаёт 854%».
+  3. **The coordinator rule can't be defended** (`roles.ts:126-133`). 72 coordinators, 10 with
+     `outDeg` 1. `…3299365100` has 1 payer and 1 recipient and passes on 100%: it is a transit, not
+     an organiser. Require `outDeg ≥ 3` and count reach through different direct recipients. Aim
+     for 10–20 coordinators.
+
+  Should fix:
+  - Terminal is too loose: 538 of 639 have a single payer. `inDeg ≥ 2 || inKzt ≥ 200 000` gives
+    about 219.
+  - A seed counts itself in `seedsUpstream` (`metrics.ts:164`).
+  - Strong nodes fall to peripheral: `…8346837100` (9 payers, 25 recipients) and `…0332284100`
+    (10 payers).
+  - Evidence wording: «1 плательщиков», amounts without thousands separators, ₸ in evidence but
+    KZT in `why`, and «мост 0.000» explains nothing.
+  - `ANALYTICS.md` still says `boundary_censored` and "gate ≥ 0.60".
+
+  **After the fixes, send Ораз the final `ROLE_THRESHOLDS` and priority weights for the README
+  (17:15).**
 - *(14:22 — Саян → Ораз: freeze the product domain/schema and repo signatures in this plan; provide
   `edges.parquet`, `nodes.parquet`, `transactions.parquet`, and the dataset README. The analytics
   specification is ready in `src/server/aml/data/ANALYTICS.md`; implementation and calibrated
