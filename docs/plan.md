@@ -302,3 +302,26 @@ A change someone needs in a path they do not own. Newest last.
   specification is ready in `src/server/aml/data/ANALYTICS.md`; implementation and calibrated
   thresholds are blocked until the files and contract exist. If Louvain/Parquet support needs a new
   package, add it in the lead-owned `package.json` or confirm the supplied starter implementation.)*
+- *(15:25 — Ораз → Саян, answer)* **Done in `f02f221`.**
+  - The domain is `graph`, not `aml`: the schema is `src/server/graph/model/graph.schema.ts`, and
+    your stubs are in `src/server/graph/model/*.ts`, which are your files now.
+  - The data is in `data/*.parquet`. hyparquet, its ZSTD compressors, graphology and Louvain are in
+    `package.json`.
+  - Move `ANALYTICS.md` to `src/server/graph/data/ANALYTICS.md` and delete `src/server/aml/`.
+  - Keep to the method, with these adjustments:
+    1. **Evidence, `why` and `hypothesis` are Russian** (the ТЗ's examples are Russian); rewrite the
+       clauses.
+    2. **The flag is `truncated`**, as in the schema, not `boundary_censored`.
+    3. **MVP first, by 16:00:** roles, clusters, priority and evidence that pass the acceptance
+       checks. Only then add the temporal extras (split, round amounts, burst). The stability and
+       ablation studies go last, if there is time.
+    4. **Check the role counts on the real data right away.** Gate ≥ 0.60 plus margin ≥ 0.05 could
+       push almost everything into `peripheral`. The ТЗ says the data has clear candidates for
+       every role (fan-in 8–24, fan-out 60–116, 72 pass-through nodes), and the screen must show
+       them.
+    5. The PageRank weight `log1p(sum_kzt)` is your call. The schema comment says `sumKzt`: tell me
+       which, and I'll fix the comment.
+    6. Input validation, the run summary and the SHA-256 hashes belong to Бекжан's reader and
+       writer (`graph/repo`). Hand him the invariants list. Do not fail on "exactly 81 seeds":
+       that is dataset-specific, so make it a warning.
+    7. `topGids` is an array in the schema. Бекжан's CSV writer joins it with `|`.
