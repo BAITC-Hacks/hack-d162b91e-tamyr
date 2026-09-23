@@ -297,3 +297,8 @@ A change someone needs in a path they do not own. Newest last.
   `"predev": "pnpm pipeline"` and `"prebuild": "pnpm pipeline"` to `package.json`. They are not
   added yet because the pipeline does not exist, and adding them now would break `pnpm dev` for
   everyone.
+- *(14:22 — Саян → Ораз: freeze the product domain/schema and repo signatures in this plan; provide
+  `edges.parquet`, `nodes.parquet`, `transactions.parquet`, and the dataset README. The analytics
+  specification is ready in `src/server/aml/data/ANALYTICS.md`; implementation and calibrated
+  thresholds are blocked until the files and contract exist. If Louvain/Parquet support needs a new
+  package, add it in the lead-owned `package.json` or confirm the supplied starter implementation.)*
