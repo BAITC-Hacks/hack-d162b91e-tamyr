@@ -1,80 +1,293 @@
 # Plan
 
-Written at 13:00 by the lead, from the task's ТЗ. Changed only by the lead; anyone may add to
+Written at 14:40 by the lead, from the task's ТЗ. Changed only by the lead; anyone may add to
 **Requests**. Every agent reads this before starting work and again after every pull. The rules
 for writing it are in `AGENTS.md`, under **Every plan is split into lanes**.
+
+Decisions behind this plan are in `docs/decisions.md` (14:40 entries).
 
 ---
 
 ## Task
 
-*(Which task, and the one line of the ТЗ that the evaluation turns on.)*
+Track 2, «Граф денег» (source: `Трек 2 финансы.docx`, dataset `README.md`, organiser starter).
+From a 4-hop graph of outgoing transfers from 81 known drug-trade clients (2 248 nodes, 3 119 edges,
+4 840 transactions, July 2026), assign every node a role, a cluster and a priority, and show the
+analyst **"whom of these 2 248 to check first, and why"**.
+
+The evaluation turns on: *"the jury names 3 random gids; the team explains in one minute why the
+role is what it is, from its own metrics."* Every role is a formal rule with a threshold, and every
+row carries its evidence with numbers.
+
+Hard gates (must-have 1–5):
+
+1. `pnpm pipeline` goes from raw `data/*.parquet` to `output/nodes_roles.csv`,
+   `output/clusters.csv` and `output/top_nodes.csv` in one run, in under 5 minutes, on a clean
+   machine.
+2. `nodes_roles.csv` has exactly 2 248 rows. `gid, role, role_score, cluster_id, priority_score,
+   evidence` are all filled, and `evidence` holds numbers.
+3. Each role's rule and thresholds are documented in the README and exported in `analysis.json`.
+4. `clusters.csv` has `cluster_id, n_nodes, n_seed, sum_kzt_internal, top_gids, hypothesis`, and
+   every node has a `cluster_id`.
+5. `top_nodes.csv` has at least 20 rows (`rank, gid, role, priority_score, why`). A screen shows
+   the network with flow direction and roles, and can find any gid.
 
 ## Scenario
 
-*(One sentence: who types what, and what they get back. The demo shows exactly this.)*
+The analyst opens the app, sees the whole network coloured by role with the priority list beside
+it, and asks the assistant «кого проверять первым и почему?» or «кто собирает деньги с этих
+пятерых?». The agent calls graph tools, and the activity panel shows each call. Clicking any gid in
+the answer, the list or the search box focuses that node on the graph and opens its card.
 
-## Contract — frozen at 13:30
+User-facing text is **Russian**: UI copy, `evidence`, `why`, `hypothesis`, agent replies. Code and
+identifiers are English. Conclusions are phrased as hypotheses («признаки консолидации»), never as
+guilt.
 
-Schema: `src/server/<domain>/model/<domain>.schema.ts`
+## Stack facts everyone needs
 
-| Tool | Arguments | Returns | Writes data? | Owner |
-| --- | --- | --- | --- | --- |
-| | | | | |
+- **The pipeline is TypeScript** and runs with
+  `tsx --conditions=react-server scripts/pipeline.ts`. The condition makes `import 'server-only'`
+  resolve to its empty module outside Next. It was checked at 14:30.
+- **Dependencies (the lead adds them, nobody else):** `hyparquet`, `hyparquet-compressors` (the
+  files are **ZSTD**), `graphology`, `graphology-communities-louvain`,
+  `graphology-layout-forceatlas2`, `sigma`, `@react-sigma/core`.
+- **A `gid` is a string, everywhere.** Values are ~1e17, above `Number.MAX_SAFE_INTEGER`, so
+  hyparquet returns them as `bigint`. Convert them with `String()` at read time and never pass one
+  through `Number`.
+- **A date is a `'YYYY-MM-DD'` string.** hyparquet returns UTC-midnight `Date`s. Take
+  `toISOString().slice(0, 10)` at read time and compare the strings.
+- **Measured on the real data:** hyparquet reads all three files in 44 ms, and Louvain takes
+  12 ms. Our own PageRank, HITS and Brandes betweenness were checked against networkx on every node
+  and match to 1e-14. The full compute takes 0.35 s.
+- **Numbers to calibrate against:**
 
-| Repo function | Signature | Owner |
+  | Measure | Count |
+  | --- | --- |
+  | `in_deg` ≥ 2 / 3 / 5 / 8 / 12 / 20 | 446 / 200 / 51 / 17 / 5 / 1 (max 24) |
+  | `out_deg` ≥ 2 / 3 / 5 / 10 / 30 / 60 / 100 | 375 / 237 / 131 / 64 / 18 / 8 / 2 (max 116) |
+  | Nodes with both in and out | 671 |
+  | Non-seed nodes with `pass_through` 0.8–1.2 | 70 |
+  | Truncated (depth 4, no out) | 444 |
+  | No out and depth < 4 (terminal candidates) | 1 091 |
+  | Louvain communities / with more than one seed | 45 / 8 |
+  | Weakly connected components | 35 (16 plus 19 isolated seeds) |
+  | Transaction amount p10 / p50 / p90 / max | 7k / 30k / 200k / 3M KZT |
+
+- **Outputs go to `output/`, not `out/`.** `out/` is gitignored, because it is Next's export dir.
+  The three CSVs are a required artifact, so `output/` is committed at the end.
+- The page reads `output/analysis.json`, which the pipeline writes. Tool handlers are synchronous
+  (`executeTool` is sync), so the app never parses parquet at request time. `predev` and
+  `prebuild` run the pipeline, so a fresh clone cannot start with no analysis.
+
+## Contract — frozen at 15:10
+
+Schema: `src/server/graph/model/graph.schema.ts`. Owner: Ораз. It is written first, then frozen.
+It contains zod schemas and types for:
+
+| Type | Fields |
+| --- | --- |
+| `Role` | `'consolidator' \| 'transit' \| 'distributor' \| 'terminal' \| 'coordinator' \| 'peripheral'`. Exactly the six from the ТЗ. Truncation is a **flag**, not a seventh role. |
+| `RawGraph` | `nodes: {gid, depth, isSeed}[]`, `edges: {src, dst, sumKzt, nTx, depth}[]`, `transactions: {src, dst, date, sumKzt}[]` |
+| `NodeMetrics` | `gid, depth, isSeed, inDeg, outDeg, inKzt, outKzt, inTx, outTx, passThrough (number \| null), pagerank, hub, authority, betweenness, seedsUpstream, fastTransitShare, truncated` |
+| `RoleVerdict` | `role, roleScore (0–1), evidence (≤200 chars, RU, with numbers), flags: string[]` |
+| `NodeRow` | `NodeMetrics & RoleVerdict & {clusterId, priorityScore, x, y}` |
+| `EdgeRow` | `src, dst, sumKzt, nTx, depth, firstDate, lastDate` |
+| `ClusterRow` | `clusterId, nNodes, nSeed, sumKztInternal, topGids: string[], hypothesis` |
+| `TopRow` | `rank, gid, role, priorityScore, why` |
+| `Analysis` | `stats, thresholds: Record<string, number>, nodes: NodeRow[], edges: EdgeRow[], clusters: ClusterRow[], top: TopRow[]` |
+| `NodeCard` | `node: NodeRow, topIn: {gid, sumKzt, nTx}[], topOut: {gid, sumKzt, nTx}[]` (up to 5 each) |
+
+### Pure functions — Саян, `src/server/graph/model/*.ts`
+
+All are synchronous and pure, with no I/O. Stub files carrying these exact signatures land first
+(peripheral, 0, cluster 0), so the other lanes compile from minute one.
+
+| File | Signature |
+| --- | --- |
+| `metrics.ts` | `computeMetrics(raw: RawGraph): Map<string, NodeMetrics>` |
+| `roles.ts` | `ROLE_THRESHOLDS: Record<string, number>` · `assignRoles(raw: RawGraph, m: Map<string, NodeMetrics>): Map<string, RoleVerdict>` |
+| `clusters.ts` | `detectClusters(raw: RawGraph): Map<string, number>` · `summarizeClusters(raw: RawGraph, nodes: NodeRow[]): ClusterRow[]` |
+| `priority.ts` | `scorePriority(nodes: Omit<NodeRow, 'priorityScore'>[]): Map<string, number>` · `rankTop(nodes: NodeRow[], limit: number): TopRow[]` |
+| `queries.ts` | `nodeCard(a: Analysis, gid: string): NodeCard \| null` · `findCollectors(a: Analysis, gids: string[], maxHops: number)` · `traceFlow(a: Analysis, gid: string, direction: 'down' \| 'up', maxHops: number)` · `simulateRemoval(a: Analysis, gids: string[])` · `coverageGaps(a: Analysis)` |
+
+### I/O and composition — Бекжан
+
+| File | Signature |
+| --- | --- |
+| `graph/repo/parquet.ts` | `readRawGraph(dataDir: string): Promise<RawGraph>` |
+| `graph/repo/outputs.ts` | `writeOutputs(outDir: string, a: Analysis): void`: 3 CSVs plus `analysis.json` |
+| `graph/repo/analysis.ts` | `readAnalysis(outDir: string): Analysis \| null`: sync, cached, validated by `analysisSchema` |
+| `graph/usecase/layout.ts` | `computeLayout(raw: RawGraph): Map<string, {x: number, y: number}>`: ForceAtlas2 with a fixed seed |
+| `graph/usecase/analyze.ts` | `analyze(raw: RawGraph): Analysis`: composes metrics → roles → clusters → layout → priority → top |
+| `graph/usecase/getAnalysis.ts` | `getAnalysis(ctx: Ctx): Analysis \| null`: the page's only entry point |
+| `scripts/pipeline.ts` | CLI: `--data ./data --out ./output`. Prints the timing and the row counts. |
+
+### Agent tools — Бекжан, `src/server/graph/usecase/tools.ts`, spread into `TOOLS`
+
+All tools are read-only, so none needs confirmation. Each one re-validates its gids exist and
+returns a refusal row otherwise.
+
+| Tool | Arguments | Returns |
 | --- | --- | --- |
-| | | |
+| `get_top_nodes` | `limit?` (1–50), `role?`, `clusterId?` | `TopRow[]` |
+| `get_node` | `gid` | `NodeCard` |
+| `get_cluster` | `clusterId` | `ClusterRow` plus its top members |
+| `find_collectors` | `gids` (2–20), `maxHops?` (1–4) | nodes reached from ≥2 of the gids, with KZT received |
+| `trace_flow` | `gid`, `direction`, `maxHops?` | the sub-graph of edges from or to the gid |
+| `simulate_removal` | `gids` | components and seed reach, before and after |
+| `coverage_gaps` | — | the missing data, and the next request to make |
+
+## Role rules — starting point for Саян
+
+Tune these against the data, keep every number in `ROLE_THRESHOLDS`, and document the final set in
+the README. The rules are applied in this order, first match wins:
+
+1. **Truncated** (depth 4, `outDeg` 0): never `terminal`. It becomes `consolidator` if the
+   consolidator rule holds on inputs alone, otherwise `peripheral`. It gets the flag `truncated`,
+   `roleScore` ≤ 0.5, and evidence saying «обход остановлен на 4-м колене».
+2. **coordinator**: a seed or depth ≤ 1 node whose outgoing money reaches ≥ 2 consolidators or
+   distributors within 2 hops, or which is in the top by `hub` and `betweenness`. This is the
+   candidate organiser.
+3. **distributor**: `outDeg` ≥ 10 and `outDeg` ≥ 3 × `inDeg`, a fan-out (64 nodes at ≥ 10).
+4. **consolidator**: `inDeg` ≥ 5, or `inDeg` ≥ 3 with `seedsUpstream` ≥ 2, forwarding little
+   (`passThrough` < 0.5 or `outDeg` ≤ 2). There are 51 nodes at `inDeg` ≥ 5.
+5. **transit**: in and out both > 0, `passThrough` 0.8–1.2, small degrees. `fastTransitShare`
+   (out within 2 days of in) raises the score. For a **seed**, never use `passThrough`: its inflow
+   is under-reported by construction.
+6. **terminal**: `outDeg` 0, depth < 4, and `inKzt` or `inDeg` above the threshold.
+7. **peripheral**: everything else.
+
+`roleScore` is how far the node clears its threshold, clipped to 0–1. **Priority** is a documented
+weighted sum of normalised terms: role weight, log of the flow volume, `seedsUpstream`,
+`betweenness`, `pagerank`, and the seed density of the node's cluster, with a penalty when
+`truncated`. `why` names the two or three terms that dominated, with their values.
 
 ## Lanes
 
+Two agents per person, each in its own worktree on the paths listed. Ownership differs from the
+`AGENTS.md` table in one place: **Саян owns `graph/model/**`**, which is where the pure algorithm
+belongs by the tier rules. **Бекжан owns `graph/repo/**`**, which here is only file I/O.
+
 ### Ораз — contract, interface, README
 
-- **Paths:** the schema file, `src/views/**`, `src/app/page.tsx`, `README.md`, this file
+- **Paths:** `src/server/graph/model/graph.schema.ts`, `src/app/page.tsx`, `src/app/layout.tsx`,
+  `src/app/globals.css`, `src/views/**`, `src/widgets/**`, `src/features/**`, `src/entities/**`,
+  `README.md`, `docs/plan.md`, `docs/architecture.md`, `package.json`, `pnpm-lock.yaml`,
+  `.env.example`, `data/**`, `docs/solution.svg`
 - **Tasks, in order:**
-  - [ ]
-- **Depends on:**
-- **Stubs while waiting:**
-- **Done when:**
+  - [ ] **Chunk 1, contract and setup (by 15:10).** Write `graph.schema.ts` from the table above.
+        Add the dependencies. Add the scripts `pipeline`, `predev` and `prebuild`. Copy the three
+        parquet files into `data/`. Push, then announce "contract frozen".
+  - [ ] **Chunk 2, graph screen (agent A, by 16:30).**
+        - `views/graph`: a client-only Sigma canvas (`dynamic(..., { ssr: false })`), fed
+          `nodes`/`edges` with the precomputed x/y.
+        - Directed arrows, colour by role or by cluster (a toggle), size by priority.
+        - Role colours are **tokens** in `globals.css`, read through `getComputedStyle` for Sigma.
+        - A legend, because status is never colour alone.
+        - Gid search that focuses the node and highlights its neighbours.
+        - A side panel: node card (metrics, evidence, top in/out), then the Топ-лист and
+          Кластеры tables.
+        - Loading, empty ("run `pnpm pipeline`") and error states.
+  - [ ] **Chunk 3, assistant in the screen (agent B, by 17:00).** Move the chat UI into
+        `widgets/assistant` and dock it beside the graph. Any gid in a tool result is clickable and
+        focuses the graph. A «Спросить ассистента» button on the node card fills in a question.
+  - [ ] **Chunk 4, README and slide (from 16:00, frozen at 17:00).**
+        - README: Russian abstract, run commands, role rules and thresholds (copied from
+          `ROLE_THRESHOLDS`), outputs, limitations, the 1M-node scaling section, disclosure of the
+          starter, the organiser starter and every dependency.
+        - `docs/solution.svg`: data → metrics → roles → interface.
+- **Depends on:** Бекжан's `getAnalysis` (16:00). Until then the view renders a 20-node sample
+  typed as `Analysis`.
+- **Done when:** the jury names a gid, it is found, its links show, and the card explains its role.
+  A clean clone runs from the README.
 
-### Бекжан — tools, prompt, agent loop
+### Бекжан — pipeline, tools, prompt, agent loop
 
-- **Paths:** `src/server/<domain>/usecase/**`, `src/app/api/**`
+- **Paths:** `src/server/graph/repo/**`, `src/server/graph/usecase/**`,
+  `src/server/agent/usecase/**`, `src/app/api/**`, `scripts/pipeline.ts`, `output/**`
 - **Tasks, in order:**
-  - [ ]
-- **Depends on:**
-- **Stubs while waiting:**
-- **Done when:**
+  - [ ] **Chunk 1, pipeline end to end (agent A, by 16:00).**
+        - Write `readRawGraph`, `computeLayout`, `analyze`, `writeOutputs`, `readAnalysis`,
+          `getAnalysis` and `scripts/pipeline.ts`, working against Саян's stubs.
+        - The CSV column order is exactly the ТЗ's. Extra columns go after the required ones.
+        - The CLI asserts 2 248 rows and ≥ 20 top rows, and fails loudly otherwise.
+  - [ ] **Chunk 2, tools and mock (agent B, by 16:30).**
+        - The seven tools, with specs.
+        - `runMock` scripted for the demo, keyed on intent: «кого первым» → `get_top_nodes` then
+          `get_node` on #1. «кто собирает» → `find_collectors`. «что если убрать» →
+          `simulate_removal`.
+        - The tools read through `readAnalysis`.
+  - [ ] **Chunk 3, prompt and live run (by 17:00).**
+        - `prompt.ts`: hypotheses, not guilt. Every number comes from a tool. Cite the gids.
+          Say what the data cannot show (truncation, seed inflow).
+        - Run once against a live model.
+        - Commit `output/*.csv` after the final pipeline run.
+- **Depends on:** the schema (15:10) and Саян's model functions (real by 16:00; stubs until then).
+- **Done when:** `pnpm pipeline` produces valid outputs in seconds, and the mock and live agents
+  both answer the three demo questions through real tool calls.
 
-### Саян — data, repo, algorithm
+### Саян — metrics, roles, clusters, priority, queries
 
-- **Paths:** `src/server/<domain>/data/**`, `src/server/<domain>/repo/**`
+- **Paths:** `src/server/graph/model/**` except `graph.schema.ts`, `src/server/graph/data/**`
+  (small hand-built fixture graphs for the tests)
 - **Tasks, in order:**
-  - [ ]
-- **Depends on:**
-- **Stubs while waiting:**
-- **Done when:**
+  - [ ] **Chunk 0 (15:10).** Push the stub files with the exact signatures above.
+  - [ ] **Chunk 1, metrics and roles (agent A, by 16:00).**
+        - `computeMetrics`: degrees and sums, `passThrough`, PageRank weighted by `sumKzt`, HITS,
+          Brandes betweenness, `seedsUpstream`, and `fastTransitShare` from transactions.
+        - `assignRoles`, with evidence strings in Russian that carry the numbers, for example
+          «получает от 11 плательщиков (3 seed), отдаёт дальше 3% полученного».
+        - Unit tests on the fixture graphs, one per role, plus the truncation and seed traps.
+  - [ ] **Chunk 2, clusters and priority (agent B, by 16:30).**
+        - `detectClusters`: Louvain on the undirected weighted projection. Say so in a comment:
+          the ТЗ asks. Use a fixed rng for reproducibility.
+        - `summarizeClusters`: hypothesis text generated from the role mix and seed count.
+        - `scorePriority` and `rankTop`, with `why`.
+  - [ ] **Chunk 3, queries (by 17:00).** `nodeCard`, `findCollectors`, `traceFlow`,
+        `simulateRemoval` (weak components and seed reach, before and after), `coverageGaps`.
+  - [ ] **Chunk 4, defence (17:00–17:30).** Pick 3 random gids and check each one's evidence
+        explains the role in one sentence. Tune the thresholds if not, and hand the final
+        thresholds to Ораз for the README.
+- **Depends on:** only the schema. Everything else is a pure function of `RawGraph`.
+- **Done when:** every role has a rule with thresholds, a test, and a gid in the data that shows it.
 
 ## Integration points
 
 | What meets what | In which file | By |
 | --- | --- | --- |
-| | | |
+| Schema → all three lanes | `graph/model/graph.schema.ts` | 15:10 |
+| Саян's stubs → Бекжан's `analyze` | `graph/model/*.ts` → `graph/usecase/analyze.ts` | 15:15 |
+| Real roles and metrics → CSVs | same | 16:00 |
+| `getAnalysis` → the graph screen | `graph/usecase/getAnalysis.ts` → `src/app/page.tsx` | 16:00 |
+| Queries → tools | `graph/model/queries.ts` → `graph/usecase/tools.ts` | 17:00 |
+| Tool results → clickable gids on the graph | `ToolCall.result` → `widgets/assistant` | 17:00 |
+| Final thresholds → README | `ROLE_THRESHOLDS` → `README.md` | 17:15 |
 
 ## Hourly checkpoints
 
-What each lane commits by each hour (§5.4.8).
+What each lane commits by each hour (§5.4.8). **The 14:00 mark was missed.** Commit this plan and
+the decisions now. The lead's agent commits its own lane at the end of every phase without being
+asked; the person pushes.
 
 | By | Ораз | Бекжан | Саян |
 | --- | --- | --- | --- |
-| 14:00 | | | |
-| 15:00 | | | |
-| 16:00 | | | |
-| 17:00 | README frozen | | |
-| 18:00 | Demo rehearsed | | |
+| 15:00 | Plan and decisions committed. Schema pushed by 15:10. | Parquet reader and CLI skeleton | Stubs, fixture graphs |
+| 16:00 | Graph screen on the sample, deps and data in | `pnpm pipeline` → 3 CSVs, 2 248 rows | Metrics and roles with tests |
+| 17:00 | Screen on real data plus assistant dock. **README frozen.** | 7 tools, mock scenario, live run | Clusters, priority, queries |
+| 18:00 | Demo rehearsed twice, slide | Final `output/*.csv` committed | 3-gid defence notes |
+
+## Demo — 5 minutes
+
+1. `pnpm pipeline`, live: the timing and the counts.
+2. The network: colour by role, toggle to clusters, arrows.
+3. The Топ-лист #1: the card, the evidence, the neighbours.
+4. Ask the assistant «кого проверять первым и почему?», then «кто собирает деньги с этих пятерых?».
+   The activity panel fills.
+5. `simulate_removal` of the top 5: the network splits into N fragments.
+6. What the data cannot show (truncation, seed inflow) and the next request to the bank.
 
 ## Requests
 
 A change someone needs in a path they do not own. Newest last.
 
-- *(14:10 — Саян → Бекжан: …, in `…`)*
+- *(none yet)*
