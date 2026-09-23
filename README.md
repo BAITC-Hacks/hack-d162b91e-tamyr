@@ -1,249 +1,520 @@
-# Agent Starter
+# Граф денег — Money Graph
 
-A Next.js starter for building an LLM agent quickly: a tool-calling loop that works against three
-different providers, a chat interface that shows the agent's work, a component library, a
-design-token system, and a code structure enforced by lint and tests rather than by convention.
+AML-инструмент аналитика: из 4-хопового графа переводов определяет, **кого из 2 248 клиентов проверять
+первым и почему**. HackAlem AI, трек 2 «Граф денег».
 
-**There is no product in it.** The only tool is a domain-free clock, `get_current_time`, which
-exists so the wiring has something real to run. Add the product's tools beside it.
-
-> **Reviewers and judges: start at [Verifying this project](#verifying-this-project).** It runs the
-> main scenario with no API key and no database.
+> **Эксперты и жюри:** русский раздел ниже самодостаточен — установка, запуск и проверка основного
+> сценария без API-ключа, без базы данных и без Docker. Полная документация на английском — в
+> разделе [English](#english).
 
 ---
+
+## Кратко (RU)
+
+### Что это
+
+«Граф денег» — рабочее место AML-аналитика. На входе — граф исходящих внутрибанковских переводов от
+81 известного клиента (seed) на глубину 4 колена: **2 248 узлов, 3 119 рёбер, 4 840 транзакций, июль
+2026**. Пайплайн считает метрики каждого узла и присваивает ему **роль** (одну из шести по ТЗ),
+**кластер** и **приоритет проверки**, а у каждой строки есть `evidence` — объяснение с числами. Экран
+показывает сеть с направлением денег, роли, поиск по gid, карточку узла и топ-лист; AI-ассистент
+отвечает на вопросы вида «кого проверять первым и почему?», вызывая инструменты над графом.
+
+**Выводы — это гипотезы для проверки, а не обвинения.** Разметки «виновен / не виновен» в данных нет,
+поэтому каждая роль — формальное правило с порогом, которое можно проверить руками.
+
+### Быстрый старт
+
+Нужно: **Node.js ≥ 22** и **pnpm 10** (`corepack enable` включает pnpm, идущий с Node).
+
+```bash
+pnpm install
+cp .env.example .env          # PowerShell: Copy-Item .env.example .env
+pnpm pipeline                 # data/*.parquet → output/*.csv + output/analysis.json, секунды
+pnpm dev                      # http://localhost:3000
+```
+
+- `pnpm pipeline` читает сырые `data/*.parquet` (лежат в репозитории) и пишет `output/nodes_roles.csv`,
+  `output/clusters.csv`, `output/top_nodes.csv` и `output/analysis.json`. Работает за секунды (по ТЗ
+  допустимо до 5 минут), печатает время и число строк.
+- `pnpm dev` запускает пайплайн сам, если в `package.json` настроен `predev`; запускать
+  `pnpm pipeline` явно перед `pnpm dev` всегда безопасно.
+- База данных и Docker **не нужны**. `.env.example` уже содержит `LLM_PROVIDER=mock` — ассистент
+  работает без ключа и без сети.
+
+### Переменные окружения
+
+| Переменная     | Значение для проверки | Для живой модели       |
+| -------------- | --------------------- | ---------------------- |
+| `LLM_PROVIDER` | `mock`                | `responses`            |
+| `LLM_MODEL`    | не используется       | `gpt-6-luna`           |
+| `LLM_API_KEY`  | пусто                 | ключ OpenAI API        |
+| `LLM_BASE_URL` | пусто                 | пусто (OpenAI)         |
+
+`mock` — сценарный агент, который вызывает **настоящие** инструменты через тот же диспетчер, что и
+живая модель. Ключи никогда не коммитятся.
+
+### Как проверить основной сценарий
+
+1. `pnpm pipeline` — в консоли время выполнения и счётчики строк.
+2. Проверить выгрузки: в `output/nodes_roles.csv` ровно **2 248** строк данных (плюс заголовок), в
+   `output/top_nodes.csv` — **не менее 20**, в `output/clusters.csv` — строка на кластер с гипотезой.
+   Например: `node -e "console.log(require('fs').readFileSync('output/nodes_roles.csv','utf8').trim().split('\n').length - 1)"`
+   печатает `2248`.
+3. `pnpm dev` и открыть <http://localhost:3000>: сеть раскрашена по ролям, стрелки показывают
+   направление денег, рядом — топ-лист.
+4. Ввести любой gid из `nodes_roles.csv` в поиск: узел фокусируется, соседи подсвечиваются,
+   открывается карточка — метрики, роль, `evidence`, крупнейшие входящие и исходящие контрагенты.
+5. Открыть топ-лист и кластеры; клик по gid фокусирует узел на графе.
+6. Спросить ассистента **«кого проверять первым и почему?»**, затем **«кто собирает деньги с этих
+   пятерых?»** (и, по желанию, «что если убрать первых пятерых?»). В панели активности видно каждый
+   вызов инструмента: имя, аргументы, результат и время. Ответ собран из результатов инструментов.
+
+### Выгрузки
+
+| Файл              | Обязательные колонки (порядок по ТЗ)                                        |
+| ----------------- | --------------------------------------------------------------------------- |
+| `nodes_roles.csv` | `gid, role, role_score, cluster_id, priority_score, evidence`, далее метрики |
+| `clusters.csv`    | `cluster_id, n_nodes, n_seed, sum_kzt_internal, top_gids, hypothesis`       |
+| `top_nodes.csv`   | `rank, gid, role, priority_score, why`                                      |
+
+Роли: `consolidator`, `transit`, `distributor`, `terminal`, `coordinator`, `peripheral`. Правила и
+пороги — в разделе [Method](#method) ниже; те же пороги экспортируются в `output/analysis.json`
+(`thresholds`).
+
+### Команда
+
+- **Ораз Исабеков** — контракт данных, интерфейс, README
+- **Бекжан** — пайплайн, инструменты агента
+- **Саян** — алгоритм: метрики, роли, кластеры, приоритет
+
+Проект начат с заранее подготовленного шаблона без функциональности по задаче — см.
+[раскрытие сторонних компонентов](#third-party-components-and-prior-work).
+
+---
+
+## English
+
+- [What it is](#what-it-is)
+- [Quick start](#quick-start)
+- [Environment variables](#environment-variables)
+- [Checking the main scenario](#checking-the-main-scenario)
+- [Outputs](#outputs)
+- [Method](#method)
+- [Architecture](#architecture)
+- [Agent tools](#agent-tools)
+- [Limitations](#limitations)
+- [Scaling to ~1M nodes](#scaling-to-1m-nodes)
+- [Tests and checks](#tests-and-checks)
+- [Scripts](#scripts)
+- [Team](#team)
+- [Third-party components and prior work](#third-party-components-and-prior-work)
+
+## What it is
+
+**Money Graph** («Граф денег») is a tool for an anti-money-laundering analyst. The input is a graph of
+outgoing intra-bank transfers collected four hops out from 81 known clients (the _seeds_): **2 248
+nodes, 3 119 edges, 4 840 transactions, July 2026**, transfers of at least 5 000 KZT.
+
+From that graph the pipeline assigns every node a **role** (exactly the six from the task), a
+**cluster** and a **priority score**, and writes an `evidence` string with numbers for every row. The
+screen shows the network with the direction of money and the roles, finds any gid, and opens a card
+explaining it. An AI assistant answers questions such as «кого проверять первым и почему?» ("whom do
+I check first, and why?") by calling read-only tools over the same analysis.
+
+**Its conclusions are hypotheses for an analyst to verify, not accusations.** The data carries no
+ground truth, so every role is a formal rule with a threshold that anyone can check by hand. User
+facing text (UI, `evidence`, `why`, `hypothesis`, assistant replies) is in Russian; code is in
+English.
+
+![Solution diagram: data → metrics → roles, clusters, priority → interface](docs/solution.svg)
 
 ## Quick start
 
-```bash
-pnpm install
-cp .env.example .env
-pnpm dev                 # http://localhost:3000
-```
-
-That is the whole setup, and it works with **no API key and no database** — the example
-environment ships with `LLM_PROVIDER=mock`, a scripted agent that drives the real tools. No Docker,
-no migrations; the database stays dormant until you decide otherwise.
-
-For a live model, set `LLM_PROVIDER=responses` and a real `LLM_API_KEY` in `.env`.
-
-`/design` renders every component and token in both themes.
-
----
-
-## Verifying this project
-
-The main scenario runs with **no credentials of any kind**:
+Prerequisites: **Node.js ≥ 22** and **pnpm 10** (`corepack enable` activates the pnpm that ships with
+Node). No database, no Docker, no API key.
 
 ```bash
 pnpm install
-cp .env.example .env
-echo "LLM_PROVIDER=mock" >> .env
-pnpm dev
+cp .env.example .env          # PowerShell: Copy-Item .env.example .env
+pnpm pipeline                 # data/*.parquet → output/*.csv + output/analysis.json, in seconds
+pnpm dev                      # http://localhost:3000
 ```
 
-Open <http://localhost:3000> and send **“What time is it?”**. The agent calls a tool, the
-right-hand panel shows which tool it chose, what it passed, what came back and how long it took,
-and the answer is composed from that result.
+- `pnpm pipeline` reads the raw `data/*.parquet` files (committed to the repository, 87 KB) and writes
+  `output/nodes_roles.csv`, `output/clusters.csv`, `output/top_nodes.csv` and `output/analysis.json`.
+  It runs in seconds (the task allows up to five minutes), prints its timing and row counts, and
+  fails loudly if `nodes_roles.csv` does not have 2 248 rows or `top_nodes.csv` has fewer than 20.
+- `pnpm dev` runs the pipeline first when `predev` is configured in `package.json`; running
+  `pnpm pipeline` explicitly beforehand is always safe.
+- `pnpm build && pnpm start` serves a production build.
 
-`LLM_PROVIDER=mock` runs a scripted agent through the **real** tool dispatcher. It is the product
+## Environment variables
+
+`.env.example` is complete and ships with `LLM_PROVIDER=mock`, so copying it gives a working product.
+
+| Variable       | Verification      | Live model        | Meaning                                                    |
+| -------------- | ----------------- | ----------------- | ---------------------------------------------------------- |
+| `LLM_PROVIDER` | `mock`            | `responses`       | `mock`, `responses` (OpenAI Responses API) or `chat`       |
+| `LLM_MODEL`    | ignored           | `gpt-6-luna`      | Model id                                                   |
+| `LLM_API_KEY`  | empty             | an OpenAI API key | Never commit a real key                                    |
+| `LLM_BASE_URL` | empty             | empty             | Only for an OpenAI-compatible endpoint with `chat`         |
+
+**`LLM_PROVIDER=mock` is how reviewers verify the main scenario** (§5.6.6): a scripted agent that
+calls the **real** tools through the real dispatcher, with no key and no network. It is the product
 with the model removed, not a stub of it — a tool that would refuse still refuses.
 
-To check the same flow against a live model, set `LLM_PROVIDER=responses` and a real `LLM_API_KEY`.
+The remaining variables in `.env.example` (hosted tools, the optional PostgreSQL database) are
+inherited from the starter template and are not used by this product.
 
-The automated checks:
+## Checking the main scenario
+
+1. **Run the pipeline:** `pnpm pipeline`. It prints the timing and the row counts.
+2. **Check the outputs:**
+   - `output/nodes_roles.csv` has exactly **2 248** data rows plus a header, and the six required
+     columns (`gid`, `role`, `role_score`, `cluster_id`, `priority_score`, `evidence`) are filled on
+     every row;
+   - `output/top_nodes.csv` has **at least 20** rows, sorted by priority;
+   - `output/clusters.csv` has one row per cluster, each with a hypothesis.
+
+   A row count that works on any OS:
+
+   ```bash
+   node -e "console.log(require('fs').readFileSync('output/nodes_roles.csv','utf8').trim().split('\n').length - 1)"
+   ```
+
+3. **Open the screen:** `pnpm dev`, then <http://localhost:3000>. The network is coloured by role
+   (toggle to colour by cluster), arrows show the direction of money, and size follows priority. A
+   legend names every colour.
+4. **Find a gid:** paste any gid from `nodes_roles.csv` into the search. The node is focused, its
+   neighbours are highlighted and its card opens: metrics, role, `evidence`, and the largest senders
+   and receivers.
+5. **Open the top list** (Топ-лист) and the clusters (Кластеры). Clicking a gid focuses it on the
+   graph.
+6. **Ask the assistant** «кого проверять первым и почему?», then «кто собирает деньги с этих
+   пятерых?», optionally «что если убрать первых пятерых?». The activity panel shows every tool call
+   — which tool, its arguments, its result and its duration — and the answer is composed from those
+   results. Any gid in an answer is clickable.
+
+## Outputs
+
+All three CSVs follow the task's schema exactly. Required columns come first in the task's order;
+extra columns may follow.
+
+**`output/nodes_roles.csv`** — one row per node, 2 248 rows.
+
+| Column           | Meaning                                                                  |
+| ---------------- | ------------------------------------------------------------------------ |
+| `gid`            | Client id, kept as a string (values are ~1e17, above JS's safe integer)  |
+| `role`           | One of `consolidator, transit, distributor, terminal, coordinator, peripheral` |
+| `role_score`     | 0–1: how far the node clears its role's threshold                        |
+| `cluster_id`     | Louvain community                                                        |
+| `priority_score` | 0–1: priority for review                                                 |
+| `evidence`       | Russian, ≤ 200 characters, with numbers                                  |
+| _then_           | extra columns: the metrics below (depth, seed flag, degrees, sums, pass-through, PageRank, HITS, betweenness, seeds upstream, fast transit, truncated) |
+
+**`output/clusters.csv`** — one row per cluster: `cluster_id, n_nodes, n_seed, sum_kzt_internal,
+top_gids, hypothesis`. `sum_kzt_internal` sums the edges with both ends inside the cluster;
+`hypothesis` is Russian and phrased as something to check.
+
+**`output/top_nodes.csv`** — at least 20 rows: `rank, gid, role, priority_score, why`. `why` names
+the two or three terms that dominated the score, with their values.
+
+**`output/analysis.json`** — everything the screen and the agent read: stats, the role
+`thresholds`, every node with its metrics, verdict and precomputed layout, every edge with first and
+last transaction date, clusters and the top list. Its shape is the zod schema in
+`src/server/graph/model/graph.schema.ts`.
+
+## Method
+
+### Metrics
+
+Computed on the **directed, weighted** graph, per node:
+
+| Metric                        | Definition                                                                       |
+| ----------------------------- | -------------------------------------------------------------------------------- |
+| `in_deg`, `out_deg`           | Distinct senders / distinct receivers                                            |
+| `in_kzt`, `out_kzt`           | KZT received / sent inside the graph                                             |
+| `in_tx`, `out_tx`             | Number of transfers — sums and counts are different signals                      |
+| `pass_through`                | `out_kzt / in_kzt`, empty when nothing came in. **Not used for seeds**           |
+| `pagerank`                    | PageRank weighted by `sum_kzt`, α = 0.85, dangling mass spread uniformly         |
+| `hub`, `authority`            | HITS: hubs send to good collectors, authorities collect from good hubs           |
+| `betweenness`                 | Brandes, directed, normalised by (n−1)(n−2)                                      |
+| `seeds_upstream`              | How many distinct seeds reach this node along directed edges                     |
+| `fast_transit_share`          | Share of outgoing KZT sent within 2 days of an incoming transfer (from dates)    |
+| `truncated`                   | Depth 4 and no outgoing edges: the traversal stopped here, not the money         |
+
+Our PageRank, HITS and betweenness were checked against networkx on all 2 248 nodes and agree to
+within 1e-14.
+
+### Roles
+
+Every role is a formal rule. The rules are applied **in this order, and the first match wins**.
+`role_score` is how far the node clears its threshold, clipped to 0–1.
+
+<!-- THRESHOLDS: synced from ROLE_THRESHOLDS in src/server/graph/model/roles.ts at 17:15 -->
+
+| # | Role / case      | Rule                                                                                                          | Thresholds                                                        |
+| - | ---------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| 1 | truncated (flag) | Depth 4 and `out_deg` = 0. Never `terminal`: `consolidator` if its inputs alone meet rule 4, else `peripheral` | depth = 4; `role_score` ≤ 0.5                                     |
+| 2 | `coordinator`    | Seed or depth ≤ 1, and its money reaches ≥ 2 consolidators or distributors within 2 hops, or it is top by both `hub` and `betweenness` | depth ≤ 1; ≥ 2 targets; ≤ 2 hops                                  |
+| 3 | `distributor`    | Fan-out: many receivers, few senders                                                                          | `out_deg` ≥ 10 and `out_deg` ≥ 3 × `in_deg`                       |
+| 4 | `consolidator`   | Collects from many and forwards little                                                                        | `in_deg` ≥ 5, or `in_deg` ≥ 3 with `seeds_upstream` ≥ 2; and `pass_through` < 0.5 or `out_deg` ≤ 2 |
+| 5 | `transit`        | Money in and money out in about equal measure, small degrees; fast forwarding raises the score. Never on `pass_through` for a seed | 0.8 ≤ `pass_through` ≤ 1.2; out within 2 days of in              |
+| 6 | `terminal`       | Money stops here, and not because the traversal stopped                                                       | `out_deg` = 0, depth < 4, `in_kzt` or `in_deg` above threshold    |
+| 7 | `peripheral`     | Everything else                                                                                               | —                                                                 |
+
+<!-- /THRESHOLDS -->
+
+The applied numbers are exported with every run as `thresholds` in `output/analysis.json`; if this
+table and that file ever disagree, the file is what was applied.
+
+For scale, on this data: 51 nodes have `in_deg` ≥ 5; 64 have `out_deg` ≥ 10; 70 non-seed nodes have
+`pass_through` between 0.8 and 1.2; 444 nodes are truncated; 1 091 have no outgoing transfers at
+depth < 4.
+
+### Clusters
+
+Louvain community detection (`graphology-communities-louvain`) on the **undirected** projection,
+weighted by `sum_kzt`. Direction is dropped **only for clustering** — every metric and role above
+uses the directed graph. The random generator is seeded, so the same data gives the same clusters on
+every run. Each cluster gets a Russian hypothesis generated from its role mix and seed count. On this
+data Louvain finds about 45 communities, 8 of them holding more than one seed.
+
+### Priority
+
+`priority_score` is a documented weighted sum of normalised terms: the role's weight, the log of the
+flow volume, `seeds_upstream`, `betweenness`, `pagerank` and the seed density of the node's cluster,
+with a penalty when the node is `truncated`. It is scaled to 0–1. `why` names the two or three terms
+that contributed most, with their values.
+
+<!-- PRIORITY WEIGHTS: add the exact weights from src/server/graph/model/priority.ts at 17:15 -->
+
+### How the data traps are handled
+
+- **Depth-4 truncation.** 444 nodes sit at the fourth hop with no outgoing edges because the
+  traversal ended there. They are never `terminal`: they carry the flag `truncated`, their
+  `role_score` is capped at 0.5, their priority is penalised, and their evidence says «обход
+  остановлен на 4-м колене».
+- **Seed inflow is under-reported.** The graph was collected _from_ the seeds along outgoing
+  transfers, so money a seed received from outside the sample is missing, and `pass_through` of 20+
+  is an artefact of the export. `pass_through` is never used to assign a role to a seed.
+- **Sums and counts differ.** One transfer of 4M and forty of 100k give the same `in_kzt`; degrees,
+  transfer counts and sums are all kept and all shown.
+- **The 5 000 KZT threshold.** Smaller transfers are absent, so a node's degree is a lower bound and
+  a "small" flow may be a split one.
+- **Fragments.** The graph has 35 weakly connected components: 16 components plus 19 isolated seeds.
+  Isolated seeds are kept, get a role like any other node, and are reported as a coverage gap.
+- **No ground truth.** There are no labels, so nothing is trained. Explainable rules with thresholds
+  let the analyst — and the jury — check any verdict from the node's own numbers in a minute.
+
+## Architecture
+
+One Next.js application, **TypeScript end to end**: the pipeline that writes the CSVs and the
+server that answers the agent call the same functions.
+
+```
+data/*.parquet
+   │  scripts/pipeline.ts            CLI: --data ./data --out ./output; timing and row counts
+   ▼
+src/server/graph/repo/               file I/O only
+   parquet.ts                        readRawGraph: hyparquet + ZSTD; gid → string, date → 'YYYY-MM-DD'
+   outputs.ts                        writeOutputs: 3 CSVs + analysis.json
+   analysis.ts                       readAnalysis: sync, cached, validated by the zod schema
+   ▼
+src/server/graph/model/              the pure algorithm: synchronous, no I/O, unit-tested
+   graph.schema.ts                   the contract (zod): every shape below
+   metrics.ts                        degrees, sums, pass-through, PageRank, HITS, betweenness, …
+   roles.ts                          ROLE_THRESHOLDS, assignRoles
+   clusters.ts                       Louvain, cluster summaries and hypotheses
+   priority.ts                       scorePriority, rankTop
+   queries.ts                        node card, collectors, flow trace, removal, coverage gaps
+   ▼
+src/server/graph/usecase/
+   analyze.ts                        metrics → roles → clusters → layout → priority → top
+   layout.ts                         ForceAtlas2 with a fixed seed, so the picture never moves
+   getAnalysis.ts                    the page's only entry point
+   tools.ts                          the seven agent tools
+   ▼
+src/app/ + src/views/graph           Sigma.js (WebGL) network screen, card, top list, clusters
+src/widgets/assistant                chat docked beside the graph, activity panel
+src/server/agent/usecase             agent loop, tool registry, prompt, mock adapter
+app/api/chat/route.ts                POST /api/chat — the only network call the UI makes
+```
+
+The page reads `output/analysis.json`; it never parses parquet at request time, which keeps the
+tool handlers synchronous and the screen instant.
+
+**Why TypeScript and not Python.** One runtime means one install for the reviewers, and a project the
+experts cannot run is eliminated. The agent's tools call exactly the functions that produced the
+CSVs, so the chat and the files cannot disagree. We verified our graph algorithms against networkx
+(1e-14) before committing to them; the whole computation takes about a third of a second. The
+organiser's Python starter was used as a reference only.
+
+**Code structure.** The interface is Feature-Sliced Design (`app → views → widgets → features →
+entities → shared`, importing downward only). The server is `src/server/` in tiers (`kernel` →
+`<domain>/model` → `<domain>/repo` → `<domain>/usecase`), also downward only. Both are enforced by
+`eslint-plugin-boundaries`, so a violation fails the build. `docs/architecture.md` is the
+specification; `docs/plan.md` and `docs/decisions.md` record how the work was split and why.
+
+### Stack
+
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · Radix UI · Zod · hyparquet ·
+graphology (Louvain, ForceAtlas2) · Sigma.js 3 with `@react-sigma/core` · the OpenAI SDK
+(Responses API) · Vitest · ESLint.
+
+### LLM providers
+
+`LLM_PROVIDER` chooses how the agent talks to a model. Tools and loop are identical in all three;
+only the wire format changes.
+
+| Value       | Dialect              | Use it for                                          |
+| ----------- | -------------------- | --------------------------------------------------- |
+| `responses` | OpenAI Responses API | The live model, `gpt-6-luna`                        |
+| `chat`      | Chat Completions     | Any OpenAI-compatible endpoint (set `LLM_BASE_URL`) |
+| `mock`      | none                 | No key, no network. Reviews and offline demos       |
+
+## Agent tools
+
+All tools are **read-only**, so none needs confirmation. Each validates its arguments with zod
+(tool arguments are a model's free text), re-checks that every gid exists and returns a refusal row
+otherwise. The dispatcher never throws: a failing tool is a row saying "failed".
+
+| Tool               | Arguments                              | Returns                                                         |
+| ------------------ | -------------------------------------- | --------------------------------------------------------------- |
+| `get_top_nodes`    | `limit?` (1–50), `role?`, `clusterId?` | Top rows by priority, with `why`                                |
+| `get_node`         | `gid`                                  | The node card: metrics, role, evidence, top 5 in and out        |
+| `get_cluster`      | `clusterId`                            | The cluster row and its top members                             |
+| `find_collectors`  | `gids` (2–20), `maxHops?` (1–4)        | Nodes reached from ≥ 2 of the gids, with the KZT they received  |
+| `trace_flow`       | `gid`, `direction`, `maxHops?`         | The sub-graph of edges downstream or upstream of the gid        |
+| `simulate_removal` | `gids`                                 | Components and seed reach, before and after removing the gids   |
+| `coverage_gaps`    | —                                      | What the data is missing, and the next request to the bank      |
+
+The prompt requires every number in an answer to come from a tool result, every claim to cite its
+gids, conclusions to be phrased as hypotheses, and the assistant to say what the data cannot show
+(truncation, seed inflow).
+
+## Limitations
+
+- **The sample is one-directional and truncated.** Only outgoing transfers from seeds, four hops,
+  one month. Inflows into seeds and anything past the fourth hop are invisible; a truncated node
+  cannot be classified as a final recipient.
+- **Transfers under 5 000 KZT are absent**, so structuring into small amounts is not visible.
+- **Intra-bank only.** Cash, other banks and crypto exits look like terminals or are missing.
+- **Rules, not a model.** Thresholds are calibrated on this one dataset and would need re-tuning on
+  another; without labels, precision and recall cannot be measured.
+- **Roles are exclusive.** A node that both collects and distributes gets the first matching role;
+  the metrics in its row show the rest.
+- **Louvain is non-deterministic in general**; a fixed seed makes it reproducible, not unique.
+  Undirected clustering ignores which way money flows inside a cluster.
+- **The assistant can only be as right as its tools**; it explains the rules, it does not add
+  knowledge beyond the data.
+
+## Scaling to ~1M nodes
+
+The current design computes everything in memory in a third of a second on 2 248 nodes. At around a
+million nodes and tens of millions of transfers it would change in these places:
+
+- **Reading.** Stream the parquet files by row group and column instead of loading them whole;
+  build the adjacency directly into compressed sparse (CSR) arrays rather than JS objects.
+- **Metrics.** PageRank and HITS become sparse matrix–vector iterations (linear in edges per
+  iteration). Exact Brandes betweenness is O(V·E) and becomes infeasible, so switch to
+  approximate betweenness by sampling k source pivots. Move heavy computation to a graph engine
+  where it pays: igraph or graph-tool on one machine, GraphFrames/Spark or a graph database for a
+  bank-scale cluster.
+- **Clustering.** Leiden instead of Louvain: faster at scale and guarantees connected communities.
+- **Incremental recomputation.** New transactions arrive daily; recompute only the affected
+  neighbourhoods and roles, and keep the full recomputation as a nightly job.
+- **Interface.** Sigma.js handles on the order of 100k nodes in a browser. Beyond that the screen
+  shows cluster summaries and ego-networks around a searched gid, with server-side filtering,
+  precomputed tiles and level-of-detail rendering instead of the whole graph.
+- **Agent tools.** Back the queries with an index or a graph database (neighbourhood, k-hop,
+  top-by-priority) instead of scanning in-memory arrays; the tool contracts stay the same.
+
+## Tests and checks
 
 ```bash
 pnpm check
 ```
 
-One command: typecheck, lint at `--max-warnings 0`, and the unit suite, run in parallel. Warnings
-are failures. It needs nothing running — no database, no API key, no network.
+One command: typecheck, lint at `--max-warnings 0`, and the unit suite, in parallel. Warnings are
+failures. It needs nothing running — no database, no API key, no network. The algorithm in
+`src/server/graph/model` is covered by unit tests on small hand-built graphs: one per role, plus the
+truncation and seed traps.
 
----
-
-## Architecture
-
-Two axes that meet only in `src/app/`.
-
-**The interface** is Feature-Sliced Design — `app → views → widgets → features → entities → shared`,
-importing strictly downward.
-
-**The server** is `src/server/`, which is not an FSD layer. Its tiers are
-`kernel`/`db` → `<domain>/model` → `<domain>/repo` → `<domain>/usecase` → `jobs`, also importing
-only downward. A repo never reaches another domain's repo; cross-domain work lives in a usecase.
-
-Both are enforced by `eslint-plugin-boundaries`, so a violation is a failed build rather than a
-review comment. `docs/architecture.md` is the specification.
-
-```
-src/
-  app/               Routes, layouts, the API route. Where the two axes meet.
-  views/             Screens. The FSD "pages" layer, aliased @pages/* — never src/pages/.
-  widgets/           AppShell: sidebar, header, theme toggle, toasts.
-  shared/ui/         17 primitives built on Radix. Tokens only, no hard-coded colour.
-  shared/lib/        Form helpers, theme script.
-  server/kernel/     ctx, env validation, domain errors.
-  server/db/         Prisma client, transactions, error mapping. Dormant by default.
-  server/agent/      The agent domain. The product's domain goes here or beside it.
-    model/           Zod schemas. *.schema.ts is the one thing the UI may import.
-    data/            JSON fixtures. Empty in the starter.
-    repo/            Readers and stores. Empty in the starter.
-    usecase/         Tool registry, agent loop, structured output, prompt.
-```
-
-### The agent
-
-| File | What it is |
-| --- | --- |
-| `server/agent/usecase/tools.ts` | The tool registry. Adding a tool is one object. |
-| `server/agent/usecase/agent.ts` | The loop, in three adapters. |
-| `server/agent/usecase/structured.ts` | `complete(schema, …)` — one call, typed object back. |
-| `server/agent/usecase/prompt.ts` | The system prompt and its hard rules. |
-| `server/agent/usecase/client.ts` | One client, one retry policy. |
-| `app/api/chat/route.ts` | `POST /api/chat`. The only network call the UI makes. |
-
-**Adding a tool** — one object in `TOOLS`, and nothing else changes. The JSON Schema shown to the
-model is derived from the zod schema, so the contract and the validation cannot drift apart. The
-activity panel picks up the new tool's label automatically.
-
-```ts
-defineTool({
-  description: 'Written for the model: when to reach for this.',
-  handler: (ctx, args) => lookUpSomething(ctx, args),
-  label: 'Written for a human watching the panel',
-  name: 'look_up_something',
-  parameters: z.object({ id: z.string().describe('What this is') }),
-})
-```
-
-**Structured output** — anything of the form "read this and give me fields back" is one call:
-
-```ts
-const review = await complete(
-  z.object({ score: z.number(), summary: z.string(), tags: z.array(z.string()) }),
-  { prompt: submission, instructions: 'Score this against the rubric.' },
-);
-```
-
-Use `.nullable()` rather than `.optional()`: strict structured output requires every property to be
-present. Pass `fallback` for anything on the demo path, so `LLM_PROVIDER=mock` still runs.
-
-### Providers
-
-`LLM_PROVIDER` chooses how the agent talks to a model. The tools and the loop are identical in all
-three; only the wire format changes.
-
-| Value | Dialect | Hosted tools | Use it for |
-| --- | --- | --- | --- |
-| `responses` | OpenAI Responses API | `web_search`, `file_search` | The default. |
-| `chat` | Chat Completions | — | NVIDIA NIM, Groq, Together, vLLM. The fallback. |
-| `mock` | none | — | No key, no network. Demos and reviews. |
-
-Switching is a `.env` edit:
-
-```bash
-# OpenAI
-LLM_PROVIDER=responses   LLM_BASE_URL=                                    LLM_MODEL=gpt-5
-# NVIDIA
-LLM_PROVIDER=chat        LLM_BASE_URL=https://integrate.api.nvidia.com/v1 LLM_MODEL=…
-# Groq
-LLM_PROVIDER=chat        LLM_BASE_URL=https://api.groq.com/openai/v1      LLM_MODEL=openai/gpt-oss-120b
-```
-
-**Retrieval without infrastructure.** Point the script at a folder, paste the id it prints into
-`.env`, and the agent gains a `file_search` tool over those documents — no vector database, no
-embedding pipeline, no chunking:
-
-```bash
-pnpm tsx scripts/upload-files.ts ./path/to/documents
-```
-
----
-
-## The database, if you need one
-
-It is wired and dormant. Nothing requires it and `DATABASE_URL` is unset by default, because every
-service a reviewer has to stand up is another way for a review to end early.
-
-When something genuinely has to survive a restart:
-
-```bash
-pnpm db:up          # PostgreSQL in Docker on :5433, two roles, three databases
-pnpm db:migrate
-pnpm db:seed
-pnpm test:all       # unit + integration
-```
-
-Two roles on purpose: `app_migrator` owns the schema, `app_user` owns nothing, so a mistake in
-application code cannot drop a table. All database access goes through `src/server/db` — never
-import the Prisma client anywhere else.
-
----
-
-## Structural guards
-
-Tests that fail on mistakes which pass code review:
-
-- `src/app/globals.spec.ts` builds the stylesheet and asserts it is not empty. Tailwind's source
-  detection has silently emitted zero bytes in this project — clean log, 200 response, unstyled
-  page. It also enforces the token rules from `docs/design-system.md`.
-- `src/shared/ui/rawControls.spec.ts` fails on a raw `<input>`, `<select>` or `<textarea>` in a
-  screen layer.
-- `src/server/db/transaction.spec.ts` fails on `Promise.all` inside a transaction, which queues
-  instead of parallelising and is visible only with a stopwatch.
-- `src/server/agent/usecase/tools.spec.ts` asserts the dispatcher never throws, because a throw
-  there blanks the activity panel at the worst possible moment.
-
-Add to them rather than around them, and watch each new one fail on purpose before trusting it.
-
----
+The starter's structural guards still apply: `src/app/globals.spec.ts` (the stylesheet is built and
+follows the token rules), `src/shared/ui/rawControls.spec.ts` (no raw form controls in screens) and
+`src/server/agent/usecase/tools.spec.ts` (the tool dispatcher never throws).
 
 ## Scripts
 
-| | |
-| --- | --- |
-| `pnpm dev` | Next dev server |
-| `pnpm build` / `pnpm start` | Production build and serve |
-| `pnpm verify` | typecheck + lint (warnings are failures) |
-| `pnpm test` | Unit tests. Needs nothing running. |
-| `pnpm test:all` / `test:integration` | Adds the database tests |
-| `pnpm format` | Prettier |
-| `pnpm tsx scripts/upload-files.ts <dir>` | Build a hosted vector store for `file_search` |
-| `pnpm db:up` / `db:down` / `db:reset` / `db:migrate` / `db:seed` | The optional database |
+| Command                     | What it does                                              |
+| --------------------------- | --------------------------------------------------------- |
+| `pnpm pipeline`             | `data/*.parquet` → `output/*.csv` + `output/analysis.json` |
+| `pnpm dev`                  | Next dev server on <http://localhost:3000>                |
+| `pnpm build` / `pnpm start` | Production build and serve                                |
+| `pnpm check`                | Typecheck, lint and unit tests in parallel                |
+| `pnpm test`                 | Unit tests only                                           |
+| `pnpm verify`               | Typecheck and lint                                        |
+| `pnpm format`               | Prettier                                                  |
 
-## Docs
+The `db:*` scripts and `test:integration` belong to the optional PostgreSQL database inherited from
+the starter; this product does not use a database.
 
-- `AGENTS.md` — how to work in this repository. Read it first; Codex and Claude Code both use it.
-- `docs/architecture.md` — the two axes, server tiers, transactions, migrations, testing
-- `docs/design-system.md` — tokens, palette, type, space, motion, accessibility
-- `docs/ui-patterns.md` — which control a task gets, how forms and tables behave
-- `docs/plan.md` — the scenario, the contract, and how the work was split between the team
+## Team
+
+| Member          | Lane                                                          |
+| --------------- | ------------------------------------------------------------- |
+| Ораз Исабеков   | Data contract, interface, README                              |
+| Бекжан          | Pipeline, agent tools, prompt                                 |
+| Саян            | Algorithm: metrics, roles, clusters, priority, queries        |
 
 ## Third-party components and prior work
 
-*Required disclosure. Keep this section accurate — competition rules require third-party and
-pre-existing components to be declared, and permit a prepared template only while it contains no
-functionality specific to the task.*
+_Required disclosure (§5.4.4). Keep this section accurate._
 
-**Pre-existing template.** This project was started from a general-purpose starter prepared before
-the competition: the Next.js application shell, the UI component library, the design-token system,
-the lint-enforced architecture, and a provider-agnostic LLM agent loop with one domain-free clock
-tool. It contained no functionality specific to the task. Everything addressing the task was
-built during the competitive part and is visible in this repository's commit history from the
-initial commit onward.
+**Pre-existing template.** The project was started from a general-purpose starter prepared before the
+competition, committed as `8d67410 chore: pre-existing hackathon starter template`: the Next.js
+application shell, a provider-agnostic LLM agent loop with a tool registry and a domain-free clock
+tool, the chat interface with its activity panel, the UI component library, the design-token system
+and the lint-enforced architecture. It contained no functionality specific to this task. Everything
+addressing the task — the data contract, the pipeline, the metrics, role rules, clustering and
+priority, the graph tools, the network screen and this README — was built during the competitive part
+and is visible in the commit history after that commit.
 
-**Libraries.** Next.js, React, Tailwind CSS, Radix UI, Heroicons, Prisma, Zod, React Hook Form,
-date-fns, the OpenAI SDK, Vitest and ESLint, each under its own licence. The full dependency list
-is `package.json`.
+**Organiser materials.** The dataset (`data/edges.parquet`, `data/nodes.parquet`,
+`data/transactions.parquet`, 4-hop graph of intra-bank transfers, July 2026) and the task
+specification were provided by the organisers for use within the hackathon. The organiser's Python
+starter code (`starter.py`) was read as a reference for the output schema and the data traps; none of
+it is used — our pipeline is our own TypeScript implementation.
 
-**Models and data.** The agent calls a hosted language model; which one is a `.env` setting (see
-*Providers*). No model was trained or fine-tuned for this project.
+**Model.** OpenAI **`gpt-6-luna`** through the OpenAI Responses API (`LLM_PROVIDER=responses`),
+proprietary, used under OpenAI's API terms. No model was trained or fine-tuned. `LLM_PROVIDER=mock`
+uses no model at all.
 
-- **OpenAI `gpt-5`**, through the OpenAI Responses API (`LLM_PROVIDER=responses`). Proprietary,
-  used under OpenAI's API terms.
-- **`openai/gpt-oss-120b`**, an open-weight model released by OpenAI under Apache 2.0, served by
-  Groq through its OpenAI-compatible Chat Completions API (`LLM_PROVIDER=chat`).
-- **`LLM_PROVIDER=mock`** uses no model at all: a scripted adapter in this repository that calls
-  the real tools with no key and no network.
+**Runtime dependencies** (full list and versions in `package.json`):
 
-No external datasets are used. Fixture data under `src/server/*/data/` is written by hand.
+| Package                                    | Used for                                   | Licence      |
+| ------------------------------------------ | ------------------------------------------ | ------------ |
+| `hyparquet`, `hyparquet-compressors`       | Reading the ZSTD parquet files             | MIT          |
+| `graphology`                               | Graph data structure                       | MIT          |
+| `graphology-communities-louvain`           | Louvain clustering                         | MIT          |
+| `graphology-layout-forceatlas2`            | Precomputed layout                         | MIT          |
+| `sigma`, `@react-sigma/core`               | WebGL network rendering                    | MIT          |
+| `next`, `react`, `react-dom`               | Application framework                      | MIT          |
+| `radix-ui`, `@heroicons/react`, `clsx`     | UI primitives, icons, class names          | MIT          |
+| `tailwindcss` (dev)                        | Styling                                    | MIT          |
+| `zod`                                      | Schemas and validation                     | MIT          |
+| `openai`                                   | OpenAI API client                          | Apache-2.0   |
+| `react-hook-form`, `@hookform/resolvers`   | Forms (starter)                            | MIT          |
+| `date-fns`                                 | Dates (starter)                            | MIT          |
+| `dotenv`                                   | Loading `.env`                             | BSD-2-Clause |
+| `server-only`                              | Server/client boundary guard               | MIT          |
+| `@prisma/client`, `@prisma/adapter-pg`     | Optional database (starter, unused here)   | Apache-2.0   |
+
+Development tooling — TypeScript, ESLint and its plugins, Prettier, Vitest, tsx, Prisma CLI — each
+under its own licence, listed in `package.json`.
+
+The graph algorithms that are not from a library — PageRank, HITS, Brandes betweenness,
+`seeds_upstream`, fast transit, the role rules and the priority score — are our own code in
+`src/server/graph/model`, validated against networkx.
