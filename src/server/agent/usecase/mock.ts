@@ -86,6 +86,17 @@ function roleIn(question: string): Role | undefined {
 	return ROLE_STEMS.find(([stem]) => stem.test(question))?.[1];
 }
 
+/** Words that ask for a ranking — on their own too common («проверь погоду») to mean the top list. */
+const TOP_INTENT = /перв|приорит|топ|важн|провер|подозр|top|first/u;
+
+/**
+ * The second half of the top-list intent: something that points at the graph. «топ» counts only
+ * with a number («топ-10»), so «топ новостей» stays unrecognised. Short stems are anchored at a
+ * word start (`\b` does not see Cyrillic), so «посетить» and «контроль» are not «сеть» and «роль».
+ */
+const GRAPH_CUE =
+	/узел|узл|клиент|gid|приорит|перв|подозр|(?<![а-яё])(?:кого|сет[иья]|рол[иьея])|(?:топ|top)[\s-]*\d|first/u;
+
 const NOT_UNDERSTOOD =
 	'Сценарный режим, модель не подключена: этот вопрос я не распознал. Попробуйте один из демо-вопросов:\n' +
 	'- «Кого проверять первым и почему?»\n' +
@@ -376,7 +387,7 @@ export function runMock(ctx: Ctx, input: { messages: readonly ChatMessage[] }): 
 
 	if (first !== undefined) return nodeTurn(turn, first);
 	if (/врем|time|который час/u.test(question)) return clockTurn(turn);
-	if (/перв|приорит|топ|важн|провер|подозр|top|first/u.test(question)) return topTurn(turn, topCount(question));
+	if (TOP_INTENT.test(question) && GRAPH_CUE.test(question)) return topTurn(turn, topCount(question));
 
 	// Not a guess: an unrelated question answered with the top list reads as the product ignoring
 	// what was asked. No tool is called, so the panel stays empty — which is the truth.
