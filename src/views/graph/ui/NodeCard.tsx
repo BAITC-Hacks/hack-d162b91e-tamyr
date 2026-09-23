@@ -1,5 +1,6 @@
 import { type Counterparty, type NodeRow } from '@server/graph/model/graph.schema';
 import { Badge } from '@shared/ui/Badge';
+import { Button } from '@shared/ui/Button';
 import { type ReactNode } from 'react';
 import { formatInteger, formatKzt, formatScore, formatShare } from '../model/format';
 import { flagMeta } from '../model/roles';
@@ -14,6 +15,8 @@ import { GidButton, RoleTag } from './RoleTag';
  */
 export interface NodeCardProps {
 	node: NodeRow;
+	/** Puts a question about this node into the assistant's draft. */
+	onAsk?: (gid: string) => void;
 	onSelect: (gid: string) => void;
 	topIn: readonly Counterparty[];
 	topOut: readonly Counterparty[];
@@ -58,7 +61,7 @@ function CounterpartyList(props: {
 	);
 }
 
-export function NodeCard({ node, onSelect, topIn, topOut }: NodeCardProps) {
+export function NodeCard({ node, onAsk, onSelect, topIn, topOut }: NodeCardProps) {
 	return (
 		<article aria-label={`Узел ${node.gid}`} className="flex flex-col gap-4">
 			<header className="flex flex-col gap-2">
@@ -83,6 +86,12 @@ export function NodeCard({ node, onSelect, topIn, topOut }: NodeCardProps) {
 			</header>
 
 			<p className="bg-surface-sunken text-fg rounded-md px-3 py-2.5 text-sm">{node.evidence}</p>
+
+			{onAsk !== undefined && (
+				<Button className="self-start" onClick={() => onAsk(node.gid)} variant="secondary">
+					Спросить ассистента
+				</Button>
+			)}
 
 			<dl className="divide-border grid grid-cols-1 gap-x-6 sm:grid-cols-2">
 				<Metric label="Приоритет" value={formatScore(node.priorityScore)} />

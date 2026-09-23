@@ -1,16 +1,13 @@
 import { ChatBubbleLeftRightIcon, SwatchIcon } from '@heroicons/react/24/outline';
-import { ChatScreen } from '@pages/chat';
 import { GraphScreen, SAMPLE_ANALYSIS } from '@pages/graph';
 import { AppShell, type NavigationSection } from '@widgets/appShell';
 
 /**
- * «Граф денег»: the network with the priority list beside it, and the assistant under it.
+ * «Граф денег»: the network, and beside it the card, the priority list, the clusters and the
+ * assistant — one screen, so a gid the assistant cites can be shown on the graph with one click.
  *
  * Sections are passed in rather than read from anywhere, because a widget may not import from
  * `src/server/`. Whoever renders the shell decides what this visitor sees.
- *
- * The chat stays on this page, under the graph, until Chunk 3 docks it beside the graph as
- * `widgets/assistant` (`docs/plan.md`).
  */
 const SECTIONS: readonly NavigationSection[] = [
 	{ href: '/', Icon: ChatBubbleLeftRightIcon, label: 'Граф и ассистент' },
@@ -23,15 +20,7 @@ export default function HomePage() {
 
 	return (
 		<AppShell sections={SECTIONS} title="Граф денег">
-			<div className="flex flex-col gap-8">
-				<GraphScreen analysis={analysis} />
-				<ChatScreen
-					emptyHint="Например: «Кого проверять первым и почему?»"
-					placeholder="Спросите ассистента…"
-					subtitle="Ассистент сам выбирает инструменты анализа графа и показывает каждый вызов."
-					title="Ассистент"
-				/>
-			</div>
+			<GraphScreen analysis={analysis} />
 		</AppShell>
 	);
 }

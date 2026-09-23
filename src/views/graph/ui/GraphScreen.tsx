@@ -6,6 +6,7 @@ import { Callout } from '@shared/ui/Callout';
 import { Card } from '@shared/ui/Card';
 import { Input } from '@shared/ui/Input';
 import { SegmentedControl } from '@shared/ui/SegmentedControl';
+import { Assistant, type AssistantPrefill } from '@widgets/assistant';
 import dynamic from 'next/dynamic';
 import { Tabs } from 'radix-ui';
 import { type FormEvent, useCallback, useMemo, useState } from 'react';
@@ -39,7 +40,7 @@ export interface GraphScreenProps {
 	analysis: Analysis | null;
 }
 
-type PanelTab = 'clusters' | 'node' | 'top';
+type PanelTab = 'assistant' | 'clusters' | 'node' | 'top';
 
 const COLOR_MODES = [
 	{ label: 'По ролям', value: 'role' },
@@ -76,13 +77,39 @@ function Screen({ analysis }: { analysis: Analysis }) {
 	const [tab, setTab] = useState<PanelTab>('top');
 	const [draft, setDraft] = useState('');
 	const [message, setMessage] = useState<string | null>(null);
+	const [prefill, setPrefill] = useState<AssistantPrefill | undefined>(undefined);
 
-	const selectNode = useCallback((gid: string) => {
+	/** Flies the camera and highlights the neighbours; does not change the open tab. */
+	const focusNode = useCallback((gid: string) => {
 		setFocus((previous) => ({ gid, seq: (previous?.seq ?? 0) + 1 }));
 		setHighlightCluster(null);
 		setMessage(null);
 		setDraft(gid);
-		setTab('node');
+	}, []);
+
+	const selectNode = useCallback(
+		(gid: string) => {
+			focusNode(gid);
+			setTab('node');
+		},
+		[focusNode],
+	);
+
+	// A gid the assistant cites is focused on the graph while the conversation stays open: switching
+	// to the card would hide the answer the analyst is still reading.
+	const focusFromAssistant = useCallback(
+		(gid: string) => {
+			if (index.nodes.has(gid)) focusNode(gid);
+		},
+		[focusNode, index],
+	);
+
+	const askAbout = useCallback((gid: string) => {
+		setPrefill((previous) => ({
+			nonce: (previous?.nonce ?? 0) + 1,
+			text: `Почему узел ${gid} получил такую роль и что по нему проверить в первую очередь?`,
+		}));
+		setTab('assistant');
 	}, []);
 
 	const selectCluster = (clusterId: number) => {
@@ -185,11 +212,20 @@ function Screen({ analysis }: { analysis: Analysis }) {
 						<Tabs.Trigger className={TAB_TRIGGER} value="clusters">
 							Кластеры
 						</Tabs.Trigger>
+						<Tabs.Trigger className={TAB_TRIGGER} value="assistant">
+							Ассистент
+						</Tabs.Trigger>
 					</Tabs.List>
 
 					<Tabs.Content className="max-h-[48rem] overflow-y-auto p-3" value="node">
 						{focusedNode !== undefined && card !== null ? (
-							<NodeCard node={focusedNode} onSelect={selectNode} topIn={card.topIn} topOut={card.topOut} />
+							<NodeCard
+								node={focusedNode}
+								onAsk={askAbout}
+								onSelect={selectNode}
+								topIn={card.topIn}
+								topOut={card.topOut}
+							/>
 						) : (
 							<p className="text-fg-muted text-sm">
 								Выберите узел на графе, в топ-листе или найдите его по gid — здесь появятся роль, доказательства
@@ -202,6 +238,11 @@ function Screen({ analysis }: { analysis: Analysis }) {
 					</Tabs.Content>
 					<Tabs.Content className="max-h-[48rem] overflow-y-auto p-3" value="clusters">
 						<ClusterList highlighted={highlightCluster} onSelect={selectCluster} rows={analysis.clusters} />
+					</Tabs.Content>
+					{/* Force-mounted and hidden when inactive: Radix unmounts inactive tabs, which would throw
+					    away the conversation every time the analyst glanced at a card. */}
+					<Tabs.Content className="h-[48rem] p-3 data-[state=inactive]:hidden" forceMount value="assistant">
+						<Assistant compact onGidClick={focusFromAssistant} prefill={prefill} />
 					</Tabs.Content>
 				</Tabs.Root>
 			</div>
