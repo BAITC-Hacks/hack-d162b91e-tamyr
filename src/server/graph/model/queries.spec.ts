@@ -82,7 +82,7 @@ describe('findCollectors', () => {
 	it('finds nodes reached from at least two supplied sources', () => {
 		const collectors = findCollectors(network, { gids: ['1', '2'], maxHops: 2 });
 
-		expect(collectors.map((collector) => collector.gid)).toEqual(['4', '3']);
+		expect(collectors.map((collector) => collector.gid)).toEqual(['3', '4']);
 		expect(collectors.find((collector) => collector.gid === '3')).toMatchObject({
 			gid: '3',
 			kztFromSources: 300,
@@ -90,6 +90,7 @@ describe('findCollectors', () => {
 			role: 'consolidator',
 			sources: ['1', '2'],
 		});
+		expect(collectors.find((collector) => collector.gid === '4')?.kztFromSources).toBe(250);
 	});
 
 	it('respects the hop limit', () => {

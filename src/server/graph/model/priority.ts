@@ -161,7 +161,10 @@ export function rankTop(nodes: NodeRow[], limit: number): TopRow[] {
 	const terms = termsFor(nodes);
 
 	return [...nodes]
-		.sort((a, b) => b.priorityScore - a.priorityScore || compareGids(a.gid, b.gid))
+		.sort(
+			(a, b) =>
+				Number(a.isSeed) - Number(b.isSeed) || b.priorityScore - a.priorityScore || compareGids(a.gid, b.gid),
+		)
 		.slice(0, Math.max(0, Math.trunc(limit)))
 		.map((node, index) => ({
 			gid: node.gid,

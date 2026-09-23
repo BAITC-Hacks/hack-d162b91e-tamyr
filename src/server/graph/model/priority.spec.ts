@@ -76,6 +76,15 @@ describe('rankTop', () => {
 		expect(ranked.map((row) => row.rank)).toEqual([1, 2]);
 	});
 
+	it('ranks unknown clients ahead of already known seeds', () => {
+		const ranked = rankTop(
+			[node({ gid: '1', isSeed: true, priorityScore: 0.99 }), node({ gid: '2', priorityScore: 0.1 })],
+			2,
+		);
+
+		expect(ranked.map((row) => row.gid)).toEqual(['2', '1']);
+	});
+
 	it('explains two or three dominant numeric factors in Russian', () => {
 		const [ranked] = rankTop([node({ gid: '30', priorityScore: 0.75 })], 1);
 		const clauses = ranked!.why.split('; ');

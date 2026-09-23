@@ -161,7 +161,7 @@ function computeSeedsUpstream(raw: RawGraph, adjacency: Adjacency): Map<string, 
 		const visited = new Set([seed.gid]);
 		const queue = [seed.gid];
 		for (const current of queue) {
-			upstream.get(current)?.add(seed.gid);
+			if (current !== seed.gid) upstream.get(current)?.add(seed.gid);
 			for (const neighbour of adjacency.get(current)?.keys() ?? []) {
 				if (!visited.has(neighbour)) {
 					visited.add(neighbour);

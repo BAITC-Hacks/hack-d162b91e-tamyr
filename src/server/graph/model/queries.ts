@@ -131,7 +131,7 @@ export function nodeCard(a: Analysis, gid: string): NodeCard | null {
 export function findCollectors(a: Analysis, input: CollectorsInput): Collector[] {
 	const roleOf = new Map(a.nodes.map((node) => [node.gid, node.role]));
 	const sourcesByCollector = new Map<string, Set<string>>();
-	const kztByCollector = new Map<string, number>();
+	const edgesByCollector = new Map<string, Set<Analysis['edges'][number]>>();
 	const requested = new Set(input.gids);
 
 	for (const source of requested) {
@@ -142,10 +142,8 @@ export function findCollectors(a: Analysis, input: CollectorsInput): Collector[]
 				const predecessors = a.edges.filter(
 					(edge) => edge.dst === gid && (hops.get(edge.src) ?? Number.POSITIVE_INFINITY) < hop,
 				);
-				const incomingKzt = predecessors.reduce((sum, edge) => sum + edge.sumKzt, 0);
-
 				sourcesByCollector.set(gid, new Set([...(sourcesByCollector.get(gid) ?? []), source]));
-				kztByCollector.set(gid, (kztByCollector.get(gid) ?? 0) + incomingKzt);
+				edgesByCollector.set(gid, new Set([...(edgesByCollector.get(gid) ?? []), ...predecessors]));
 			}
 		}
 	}
@@ -154,7 +152,7 @@ export function findCollectors(a: Analysis, input: CollectorsInput): Collector[]
 		.filter(([, sources]) => sources.size >= 2)
 		.map(([gid, sources]) => ({
 			gid,
-			kztFromSources: kztByCollector.get(gid) ?? 0,
+			kztFromSources: [...(edgesByCollector.get(gid) ?? [])].reduce((sum, edge) => sum + edge.sumKzt, 0),
 			reachedFrom: sources.size,
 			role: roleOf.get(gid) ?? 'peripheral',
 			sources: [...sources].sort((left, right) => left.localeCompare(right)),

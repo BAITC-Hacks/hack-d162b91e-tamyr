@@ -17,7 +17,7 @@ priority, and evidence of at most 200 characters. It must not claim criminality.
 
 | Limitation | Algorithmic treatment |
 | --- | --- |
-| Outgoing crawl ends at depth 4 | A depth-4 node with no outgoing edge is `boundary_censored`, not automatically `terminal`. |
+| Outgoing crawl ends at depth 4 | A depth-4 node with no outgoing edge carries the `truncated` flag and is never automatically `terminal`. |
 | Incoming transfers from outside the crawl are absent | Amount balances are called *observed* balances and never treated as account balances. |
 | Seed incoming amounts are incomplete | Flow-through and retention features are invalid for seeds and receive zero weight for their role. |
 | Transfers below KZT 5,000 are absent | Evidence never says “all transfers”; it says “observed transfers above the extraction threshold”. |
@@ -37,10 +37,10 @@ Fail before calculation, with an actionable error, if any of these invariants is
 - amount is non-positive, `n_tx < 1`, depth is outside 0..4, or dates are outside
   2026-07-01..2026-07-31;
 - aggregated transaction count or amount disagrees with `edges` beyond a documented tolerance;
-- there are not exactly 81 seed rows or the three required files are empty.
+- any of the three required files is empty.
 
 Log warnings, but continue, for self-loops, isolated seeds, observed outflow greater than observed
-inflow, and depth-4 sinks. Self-loops are excluded from degree and centrality calculations but stay
+inflow, depth-4 sinks, and a seed count other than the dataset's expected 81. Self-loops are excluded from degree and centrality calculations but stay
 in amount reconciliation; the other cases are declared properties of the dataset, not corrupt rows.
 
 ## Per-node features
@@ -60,9 +60,9 @@ transaction-level temporal features have been calculated.
 | `fan_in_score` | Depth-stratified percentile of `log1p(in_degree)`. |
 | `fan_out_score` | Depth-stratified percentile of `log1p(out_degree)`. |
 | `money_score` | Mean of depth-stratified percentiles of `log1p(in_amount)` and `log1p(out_amount)`. |
-| `pagerank` | Weighted directed PageRank; edge weight is `log1p(sum_kzt)`. |
-| `betweenness` | Directed unweighted Brandes betweenness, percentile-normalized. Exact calculation is small enough for 2,248 nodes and 3,119 edges. |
-| `seed_reach` | Distinct seeds that can reach the node, normalized by the maximum observed count. |
+| `pagerank` | Weighted directed PageRank; edge weight is `sum_kzt`. |
+| `betweenness` | Directed unweighted Brandes betweenness, normalized by `(n-1)(n-2)`. Exact calculation is small enough for 2,248 nodes and 3,119 edges. |
+| `seed_reach` | Count of distinct other seeds that can reach the node; a seed does not count itself. |
 | `seed_proximity` | Maximum `0.65^distance` across reachable seeds; zero if none is reachable. |
 | `component_seed_density` | Seeds divided by nodes in the weakly connected component. |
 
@@ -92,79 +92,50 @@ Additional interpretable signals:
 Temporal matching is supporting evidence only. It must not invent transaction ordering when the
 source field is a calendar date rather than a timestamp; in that case report delays in whole days.
 
-## Robust normalization
+## Thresholds and role strength
 
-Never min-max scale raw values: one extreme hub would flatten the rest of the graph. Convert every
-continuous feature to an empirical percentile in `[0, 1]`; use `log1p` before percentiles for
-amounts and degrees. Thresholds are both absolute and distribution-aware:
+Every hard threshold lives in `ROLE_THRESHOLDS` and is exported in `analysis.json`. Rules are
+applied in the documented order; the first match wins. For threshold-driven terms, strength is the
+bounded clearance `(value - threshold) / (value + threshold)`, or zero at and below the threshold.
+This prevents every qualifying node from receiving `1.00`. `role_score` is strength of observed
+evidence, not probability or guilt.
 
-- `high_in_degree = in_degree >= 8 AND fan_in_score >= 0.95`;
-- `high_out_degree = out_degree >= 8 AND fan_out_score >= 0.95`;
-- `high_centrality = mean(pagerank_percentile, betweenness_percentile) >= 0.90`.
-
-The absolute floor makes criteria stable and explainable; the percentile adapts to the supplied
-graph. Persist calculated thresholds in the run metadata so a result can be reproduced exactly.
-
-## Role candidates and confidence
-
-Each rule produces a candidate score in `[0, 1]`. A failed hard gate produces no candidate. The
-assigned role is the candidate with the highest score; ties follow the order shown below. A role
-score is rule strength, not a calibrated probability. If a supporting feature is unavailable rather
-than zero (for example seed retention), renormalize the remaining weights to sum to one.
+## Role rules
 
 ### 1. `coordinator`
 
-Hard gates: non-seed, in-degree > 0, out-degree > 0, high centrality, and at least two reachable
-seeds or membership in a multi-seed community.
+A seed or depth-1 node with at least 3 direct recipients whose outgoing flow reaches at least 15
+consolidators or distributors within two hops through at least 3 different direct recipients. The
+separate branches make the coordination hypothesis defensible instead of labelling a one-channel
+pass-through node as an organiser.
 
-`score = .30 betweenness + .20 pagerank + .20 seed_reach + .15 cross_cluster + .15 money`
+### 2. `distributor`
 
-`cross_cluster` is the percentile of distinct neighbouring communities. This label means
-*candidate coordination position*, never “organizer”.
+`out_degree >= 10` and `out_degree >= 2.5 * in_degree`. Evidence gives the sender and recipient
+counts and observed outgoing KZT.
 
-### 2. `consolidator`
+### 3. `consolidator`
 
-Hard gates: high in-degree and either `observed_retention >= 0.30` or `out_degree <= 2`.
-
-`score = .40 fan_in + .20 synchronized_in + .20 retention + .10 money + .10 seed_reach`
-
-For a seed, retention is unavailable, so a seed cannot receive this role solely from an incomplete
-balance. Multiple senders are the primary evidence.
-
-### 3. `distributor`
-
-Hard gates: high out-degree and `out_amount > 0`.
-
-`score = .45 fan_out + .15 pagerank + .15 money + .15 burst + .10 seed_reach`
+Either `in_degree >= 5`, or `in_degree >= 3` with at least 2 upstream seeds, and always
+`pass_through < 0.5`. Evidence distinguishes direct seed payers from seeds reachable at any depth.
+A depth-4 sink may receive this role from its inputs, but remains flagged `truncated` and its score
+is capped at 0.5.
 
 ### 4. `transit`
 
-Hard gates: non-seed, depth < 4, both degrees positive, `throughput_similarity >= 0.80`, and either
-`rapid_pass_ratio >= 0.60` or dates are unavailable.
-
-`score = .40 throughput_similarity + .30 rapid_pass_ratio + .15 betweenness + .15 seed_reach`
-
-If only dates are available, replace `rapid_pass_ratio` with same/next-day matching and cap the role
-score at 0.90 to reflect reduced temporal precision.
+A non-seed node with incoming and outgoing edges, total degree at most 8, and observed
+`pass_through` from 0.8 to 1.2. The share forwarded within two calendar days strengthens the score.
 
 ### 5. `terminal`
 
-Hard gates: non-seed, depth < 4, in-degree > 0, out-degree == 0.
-
-`score = .45 fan_in + .25 money + .20 seed_reach + .10 active_days`
-
-Evidence must say “observed sink before the extraction boundary”. A depth-4 sink is never terminal
-under this dataset.
+`out_degree = 0`, depth below 4, and either `in_degree >= 2` or `in_kzt >= 200000`. Depth-4 sinks
+are never terminal because onward flow is outside the extraction boundary.
 
 ### 6. `peripheral`
 
-Fallback for every node with no qualifying specialized role. Confidence is
-`1 - max(other candidate scores)`, clamped to `[0.25, 0.95]`. Depth-4 sinks include the phrase
-“outgoing continuation is unobserved at depth-4 boundary”.
-
-Specialized roles should not be selected from tiny score differences. Require winner score >= 0.60
-and a margin >= 0.05 over the runner-up; otherwise assign `peripheral` with evidence that signals
-are mixed. This is deliberately conservative for compliance use.
+Fallback when no specialised rule is defensible. High activity remains visible in evidence and in
+the centrality, flow and priority metrics even when direction or observed balance gives mixed role
+signals.
 
 ## Clustering
 

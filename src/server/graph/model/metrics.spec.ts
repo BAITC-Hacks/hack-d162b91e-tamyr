@@ -40,6 +40,7 @@ describe('computeMetrics', () => {
 			seedsUpstream: 1,
 		});
 		expect(metrics.get('4')).toMatchObject({ seedsUpstream: 1, truncated: true });
+		expect(metrics.get('1')).toMatchObject({ seedsUpstream: 0 });
 	});
 
 	it('uses KZT weights for PageRank and networkx directed normalisation for Brandes', () => {
