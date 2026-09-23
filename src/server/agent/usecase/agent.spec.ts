@@ -130,6 +130,30 @@ describe('the scripted agent', () => {
 		for (const question of [FIRST, COLLECT, REMOVE]) expect(result.reply).toContain(question);
 	});
 
+	/** «провер», «важн», «топ» alone are everyday words: the top list needs a cue that points at the graph. */
+	it.each(['Проверь погоду в Астане', 'Что важнее: контроль или посетить Астану?', 'Топ новостей'])(
+		'does not answer the off-topic «%s» with the top list',
+		async (question) => {
+			const result = await ask(question);
+
+			expect(result.toolCalls).toEqual([]);
+			expect(result.reply).toContain('не распознал');
+
+			for (const demo of [FIRST, COLLECT, REMOVE]) expect(result.reply).toContain(demo);
+		},
+	);
+
+	it('still answers the demo questions with their tool calls', async () => {
+		expect((await ask(FIRST)).toolCalls.map((call) => call.name)).toEqual(['get_top_nodes', 'get_node']);
+		expect((await ask(COLLECT)).toolCalls.map((call) => call.name)).toEqual(['get_top_nodes', 'find_collectors']);
+		expect((await ask(REMOVE)).toolCalls.map((call) => call.name)).toEqual(['get_top_nodes', 'simulate_removal']);
+		expect((await ask('Что будет, если убрать топ-10?')).toolCalls.map((call) => call.name)).toEqual([
+			'get_top_nodes',
+			'simulate_removal',
+		]);
+		expect((await ask('Какие узлы проверить в первую очередь?')).toolCalls[0]?.name).toBe('get_top_nodes');
+	});
+
 	it('explains one named gid through its card', async () => {
 		const result = await ask(`Почему ${PAYEE} получил такую роль?`);
 
