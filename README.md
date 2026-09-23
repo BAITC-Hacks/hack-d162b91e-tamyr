@@ -35,10 +35,15 @@ pnpm dev                      # http://localhost:3000
 ```
 
 - `pnpm pipeline` читает сырые `data/*.parquet` (лежат в репозитории) и пишет `output/nodes_roles.csv`,
-  `output/clusters.csv`, `output/top_nodes.csv` и `output/analysis.json`. Работает за секунды (по ТЗ
-  допустимо до 5 минут), печатает время и число строк.
-- `pnpm dev` запускает пайплайн сам, если в `package.json` настроен `predev`; запускать
-  `pnpm pipeline` явно перед `pnpm dev` всегда безопасно.
+  `output/clusters.csv`, `output/top_nodes.csv`, `output/analysis.json` и `output/run_summary.json`.
+  Работает ~3–5 секунд (по ТЗ допустимо до 5 минут), печатает время, число строк и особенности
+  данных, и **падает с ошибкой**, если строк не 2 248 или в топ-листе меньше 20.
+- `pnpm dev` и `pnpm build` **сами запускают пайплайн** (`predev` / `prebuild`), так что
+  `pnpm install && pnpm dev` — достаточно. Явный `pnpm pipeline` нужен, чтобы посмотреть выгрузки
+  без запуска сервера.
+- CSV — UTF-8 без BOM (так их читает `pandas.read_csv` без параметров, а колонка называется ровно
+  `gid`). В Excel открывать через «Данные → Из текста/CSV → UTF-8», иначе кириллица в `evidence`
+  отобразится кракозябрами.
 - База данных и Docker **не нужны**. `.env.example` уже содержит `LLM_PROVIDER=mock` — ассистент
   работает без ключа и без сети.
 
@@ -142,11 +147,16 @@ pnpm dev                      # http://localhost:3000
 ```
 
 - `pnpm pipeline` reads the raw `data/*.parquet` files (committed to the repository, 87 KB) and writes
-  `output/nodes_roles.csv`, `output/clusters.csv`, `output/top_nodes.csv` and `output/analysis.json`.
-  It runs in seconds (the task allows up to five minutes), prints its timing and row counts, and
-  fails loudly if `nodes_roles.csv` does not have 2 248 rows or `top_nodes.csv` has fewer than 20.
-- `pnpm dev` runs the pipeline first when `predev` is configured in `package.json`; running
-  `pnpm pipeline` explicitly beforehand is always safe.
+  `output/nodes_roles.csv`, `output/clusters.csv`, `output/top_nodes.csv`, `output/analysis.json`
+  and `output/run_summary.json`. It runs in about 3–5 seconds (the task allows up to five minutes),
+  prints its timing, row counts and the dataset's declared quirks, and fails loudly if
+  `nodes_roles.csv` does not have 2 248 rows or `top_nodes.csv` has fewer than 20.
+- `pnpm dev` and `pnpm build` **run the pipeline first** (`predev` / `prebuild`), so
+  `pnpm install && pnpm dev` is enough. Run `pnpm pipeline` on its own to inspect the outputs
+  without starting a server.
+- The CSVs are UTF-8 without a BOM, which `pandas.read_csv` reads with no options and which keeps
+  the first header exactly `gid`. In Excel, open them via Data → From Text/CSV → UTF-8, or the
+  Cyrillic in `evidence` will be garbled.
 - `pnpm build && pnpm start` serves a production build.
 
 ## Environment variables
@@ -217,8 +227,17 @@ extra columns may follow.
 top_gids, hypothesis`. `sum_kzt_internal` sums the edges with both ends inside the cluster;
 `hypothesis` is Russian and phrased as something to check.
 
-**`output/top_nodes.csv`** — at least 20 rows: `rank, gid, role, priority_score, why`. `why` names
-the two or three terms that dominated the score, with their values.
+**`output/top_nodes.csv`** — 50 rows (the task asks for at least 20): `rank, gid, role,
+priority_score, why`. `why` names the two or three terms that dominated the score, with their
+values.
+
+In every CSV, gids are plain digits, booleans are `true`/`false`, a missing value (for example
+`pass_through` of a node that received nothing) is an empty cell, and lists (`top_gids`, `flags`)
+are joined with `|`.
+
+**`output/run_summary.json`** — the audit trail of one run: SHA-256 of each input file, row counts,
+role counts, timings per stage, and the dataset's declared quirks as warnings (isolated seeds, nodes
+that send more than they are observed to receive, depth-4 nodes with no outgoing transfers).
 
 **`output/analysis.json`** — everything the screen and the agent read: stats, the role
 `thresholds`, every node with its metrics, verdict and precomputed layout, every edge with first and
