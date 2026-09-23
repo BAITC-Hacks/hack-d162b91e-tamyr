@@ -79,3 +79,17 @@ file the app cannot load fails the run, not the demo.
 Deterministic (identical `analysis.json` hash across runs), about 4 s of the pipeline's 4.4 s.
 Edge weight is `log10(1 + sumKzt)` so one 3M transfer does not fold the picture. Chosen over: fewer
 iterations (a looser picture) and a random start (a different picture on every run).
+
+**15:45 — The graph tools (Бекжан, `graph/usecase/tools.ts`) refuse, cap, and keep the global rank.**
+An unknown gid or cluster is a returned `{ refused: true, reason }`, never a throw; a missing
+`analysis.json` is a throw, so the panel row says "failed" and names `pnpm pipeline`. Lists going
+back to the model are capped (20 collectors, 60 flow edges, 10 cluster members) and always carry
+the total. `get_top_nodes` with a role or cluster filter ranks all 2 248 nodes and keeps the global
+rank rather than renumbering. `ToolSpec`/`defineTool` moved to `agent/usecase/defineTool.ts` so a
+domain's tools can be built without importing the registry that imports them (a cycle).
+
+**15:45 — The mock agent is keyed on word stems and reads «этих пятерых» from the previous answer.**
+`agent/usecase/mock.ts`. «собира» → `find_collectors`, «убра/удал» → `simulate_removal`, a named gid
+→ `get_node`, default → `get_top_nodes` + `get_node` on #1. The sources of «этих» are the gids the
+question names, else the gids of the previous reply, else a visible `get_top_nodes(5)` call. Chosen
+over: a fixed script by message index, which breaks the moment the jury asks out of order.

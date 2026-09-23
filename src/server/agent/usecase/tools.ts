@@ -1,7 +1,9 @@
 import { type ToolCall } from '@server/agent/model/agent.schema';
+import { GRAPH_TOOLS } from '@server/graph/usecase/tools';
 import { type Ctx } from '@server/kernel/ctx';
 import 'server-only';
 import { z } from 'zod';
+import { defineTool, type ToolSpec } from './defineTool';
 
 /**
  * The tool registry: one place that knows what the agent can do.
@@ -13,38 +15,6 @@ import { z } from 'zod';
  * The same registry feeds both adapters and the scripted one. A tool is therefore exercised
  * identically however the demo is being driven.
  */
-
-export interface ToolSpec {
-	/** Written for the model: when to reach for this, not what it returns. */
-	description: string;
-	handler: (ctx: Ctx, args: Record<string, unknown>) => unknown;
-	/** Written for a human watching the activity panel. Short. */
-	label: string;
-	name: string;
-	parameters: z.ZodType;
-}
-
-/**
- * Validation happens inside the handler, so no caller can forget it.
- *
- * Rule 5 of `CLAUDE.md` — validate all external input on the server — applies with force here:
- * tool arguments are a language model's free text, which is about as external as input gets.
- */
-function defineTool<S extends z.ZodType>(spec: {
-	description: string;
-	handler: (ctx: Ctx, args: z.output<S>) => unknown;
-	label: string;
-	name: string;
-	parameters: S;
-}): ToolSpec {
-	return {
-		description: spec.description,
-		handler: (ctx, args) => spec.handler(ctx, spec.parameters.parse(args)),
-		label: spec.label,
-		name: spec.name,
-		parameters: spec.parameters,
-	};
-}
 
 export interface CurrentTime {
 	iso: string;
@@ -61,13 +31,14 @@ function currentTime(ctx: Ctx, input: { timeZone?: string | undefined }): Curren
 }
 
 /**
- * One domain-free tool, so the loop, the dispatcher and the activity panel have something real to
- * run before the product exists. Add the product's tools beside it.
+ * The clock, plus the graph's tools from `graph/usecase/tools.ts`. Those are all read-only, so none
+ * needs a confirmation.
  *
  * A tool that changes stored data also needs a confirmation rule — prompt rule 2 — and a re-check
  * of its own preconditions in the handler. See the agent rules in `AGENTS.md`.
  */
 export const TOOLS: readonly ToolSpec[] = [
+	...GRAPH_TOOLS,
 	defineTool({
 		description:
 			"Returns the current date and time. Call this whenever an answer depends on today's date or the time of day — never assume it.",

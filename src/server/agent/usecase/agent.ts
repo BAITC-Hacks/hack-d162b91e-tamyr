@@ -3,8 +3,9 @@ import { type Ctx } from '@server/kernel/ctx';
 import { readEnv } from '@server/kernel/env';
 import 'server-only';
 import { type ChatMessageParam, createClient, type ResponseItem, type ResponsesTool, withRetry } from './client';
+import { runMock } from './mock';
 import { SYSTEM_PROMPT } from './prompt';
-import { chatToolDefinitions, type CurrentTime, executeTool, responsesToolDefinitions } from './tools';
+import { chatToolDefinitions, executeTool, responsesToolDefinitions } from './tools';
 
 /**
  * The agent loop, in three dialects that behave identically from the outside.
@@ -168,35 +169,7 @@ async function runChat(ctx: Ctx, input: AgentInput): Promise<ChatResponse> {
 	return { reply: EXHAUSTED, toolCalls };
 }
 
-// --- the scripted adapter -----------------------------------------------------------------------
-
-/**
- * The demo without a network, a key or a credit balance.
- *
- * Two things depend on this. Dead venue wifi becomes an inconvenience rather than the end of the
- * presentation — and a reviewer can run the whole main scenario without being handed anybody's
- * API key, which is a condition of the technical check rather than a convenience.
- *
- * It calls the real tools through the real dispatcher, so the rows in the activity panel are
- * genuine and rule 1 binds it exactly as it binds a model: every fact in the reply comes from a
- * tool result. It has one branch because the starter has one tool. When the product's tools
- * arrive, script the main scenario here — and for a tool that writes, propose first and act only
- * on an explicit confirmation in a later message, as prompt rule 2 demands of a model.
- */
-function runMock(ctx: Ctx, _input: AgentInput): ChatResponse {
-	const call = executeTool(ctx, { args: {}, name: 'get_current_time' });
-
-	if (call.status === 'error') {
-		return { reply: `The clock tool failed: ${String(call.result)}`, toolCalls: [call] };
-	}
-
-	const time = call.result as CurrentTime;
-
-	return {
-		reply: `Mock mode — no model is connected. The server clock reads ${time.local} (${time.timeZone}).`,
-		toolCalls: [call],
-	};
-}
+// The scripted adapter lives in `./mock.ts`: it is the demo's script, not a dialect.
 
 // --- the entry point ----------------------------------------------------------------------------
 
