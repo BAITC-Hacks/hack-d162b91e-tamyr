@@ -305,6 +305,9 @@ A change someone needs in a path they do not own. Newest last.
   are stubs. For the README: `top_gids` and `flags` are joined with `|` as you fixed at 15:25; the
   pipeline also writes `output/run_summary.json` (SHA-256 of the inputs, timings, role counts and
   the dataset warnings) — quote it in the limitations section instead of retyping the numbers.
+- *(15:35 — Ораз, done)* `predev`/`prebuild` added; `/` renders `getAnalysis(createCtx())` with an
+  error state for a broken file. Checked on the real data in headless Edge: 2 248 nodes drawn in
+  1.4 s, gid search opens the card, no console errors.
 - *(14:22 — Саян → Ораз: freeze the product domain/schema and repo signatures in this plan; provide
   `edges.parquet`, `nodes.parquet`, `transactions.parquet`, and the dataset README. The analytics
   specification is ready in `src/server/aml/data/ANALYTICS.md`; implementation and calibrated
