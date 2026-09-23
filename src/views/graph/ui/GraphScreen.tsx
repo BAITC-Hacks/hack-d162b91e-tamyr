@@ -8,10 +8,9 @@ import { Card } from '@shared/ui/Card';
 import { Input } from '@shared/ui/Input';
 import { SegmentedControl } from '@shared/ui/SegmentedControl';
 import { Assistant, type AssistantPrefill } from '@widgets/assistant';
-import clsx from 'clsx';
 import dynamic from 'next/dynamic';
 import { Tabs } from 'radix-ui';
-import { type FormEvent, type ReactNode, useCallback, useId, useMemo, useState } from 'react';
+import { type FormEvent, useCallback, useMemo, useState } from 'react';
 import { type ColorMode, type Focus } from '../model/focus';
 import { formatInteger, HIGH_PRIORITY_CUT } from '../model/format';
 import { buildIndex, counterparties, type GidLookup, lookupGid } from '../model/graphIndex';
@@ -22,7 +21,6 @@ import { CanvasSkeleton } from './GraphSkeleton';
 import { Legend } from './Legend';
 import { NodeCard } from './NodeCard';
 import { ClusterList, TopList } from './RankTables';
-import { RoleDonut } from './RoleDonut';
 import { RoleFilter } from './RoleFilter';
 import { StatsBar } from './StatsBar';
 
@@ -46,7 +44,7 @@ export interface GraphScreenProps {
 	analysis: Analysis | null;
 }
 
-type PanelTab = 'assistant' | 'clusters' | 'node';
+type PanelTab = 'assistant' | 'clusters' | 'node' | 'top';
 
 const COLOR_MODES = [
 	{ label: 'По ролям', value: 'role' },
@@ -55,7 +53,7 @@ const COLOR_MODES = [
 
 const TAB_TRIGGER =
 	'text-fg-muted hover:text-fg data-[state=active]:border-accent data-[state=active]:text-fg -mb-px border-b-2 ' +
-	'border-transparent px-3 py-2 text-sm font-medium transition-colors';
+	'border-transparent px-2.5 py-2 text-sm font-medium transition-colors';
 
 function searchMessage(result: GidLookup, total: number): string | null {
 	if (result.kind === 'invalid') return 'gid состоит только из цифр — проверьте, что скопировано целиком.';
@@ -64,42 +62,18 @@ function searchMessage(result: GidLookup, total: number): string | null {
 	return null;
 }
 
-const TAB_CONTENT = 'max-h-[40rem] min-h-0 overflow-x-hidden overflow-y-auto p-3 xl:max-h-none xl:flex-1';
+const TAB_CONTENT = 'max-h-[40rem] min-h-0 overflow-x-hidden overflow-y-auto p-3 lg:max-h-none lg:flex-1';
+
+const SUBTITLE =
+	'Кого из участников проверять первым и почему. Роли и кластеры — гипотезы для проверки, а не выводы о виновности.';
+
+const CANVAS_HINT =
+	'Стрелка — направление перевода, размер узла — приоритет проверки. Наведите на узел, чтобы увидеть полный gid.';
+
+/** The periphery is most of the graph and hides the structure, so the overview starts without it. */
+const INITIALLY_HIDDEN: readonly Role[] = ['peripheral'];
 
 const TOP_HINT = 'Упорядочено по приоритету проверки (0–1). Наведите на строку, чтобы увидеть, из чего сложился балл.';
-
-/** A titled column panel. Not `Card`: these need a tighter padding and to flex inside a fixed height. */
-function Panel(props: {
-	action?: ReactNode;
-	children: ReactNode;
-	className?: string;
-	title: string;
-	titleHint?: string;
-}) {
-	const { action, children, className, title, titleHint } = props;
-	const titleId = useId();
-
-	return (
-		<section
-			aria-labelledby={titleId}
-			className={clsx('border-border bg-surface flex flex-col gap-2.5 rounded-lg border p-3.5', className)}
-		>
-			<div className="flex min-h-8 shrink-0 items-center justify-between gap-3">
-				<h2 className="text-fg inline-flex items-center gap-1.5 text-sm font-semibold" id={titleId}>
-					{title}
-					{titleHint !== undefined && (
-						<span className="inline-flex" title={titleHint}>
-							<InformationCircleIcon aria-hidden className="text-fg-subtle size-4" />
-							<span className="sr-only">{titleHint}</span>
-						</span>
-					)}
-				</h2>
-				{action}
-			</div>
-			{children}
-		</section>
-	);
-}
 
 function EmptyState() {
 	return (
@@ -117,10 +91,14 @@ function Screen({ analysis }: { analysis: Analysis }) {
 	const [colorMode, setColorMode] = useState<ColorMode>('role');
 	const [focus, setFocus] = useState<Focus | null>(null);
 	const [highlightCluster, setHighlightCluster] = useState<number | null>(null);
-	const [tab, setTab] = useState<PanelTab>('node');
+	const [tab, setTab] = useState<PanelTab>('top');
 	const [topExpanded, setTopExpanded] = useState(false);
-	const [hiddenRoles, setHiddenRoles] = useState<ReadonlySet<Role>>(() => new Set());
+	const [hiddenRoles, setHiddenRoles] = useState<ReadonlySet<Role>>(() => new Set(INITIALLY_HIDDEN));
 	const roleCounts = useMemo(() => countRoles(analysis.nodes), [analysis]);
+	const shownCount = useMemo(
+		() => analysis.nodes.length - [...hiddenRoles].reduce((sum, role) => sum + (roleCounts.get(role) ?? 0), 0),
+		[analysis, hiddenRoles, roleCounts],
+	);
 	const highPriority = useMemo(
 		() => analysis.nodes.filter((node) => node.priorityScore >= HIGH_PRIORITY_CUT).length,
 		[analysis],
@@ -208,64 +186,50 @@ function Screen({ analysis }: { analysis: Analysis }) {
 
 	return (
 		<div className="flex flex-col gap-3">
-			<div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-				<h1 className="text-lg font-semibold">Граф денег</h1>
-				<p className="text-fg-muted text-xs">
-					Кого из {formatInteger(analysis.stats.nodes)} участников проверять первым и почему. Роли и кластеры —
-					гипотезы для проверки, а не выводы о виновности.
-				</p>
+			<div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1">
+				<h1 className="inline-flex items-center gap-1.5 text-lg font-semibold">
+					Граф денег
+					<span className="inline-flex" title={SUBTITLE}>
+						<InformationCircleIcon aria-hidden className="text-fg-subtle size-4" />
+						<span className="sr-only">{SUBTITLE}</span>
+					</span>
+				</h1>
+				<StatsBar clusters={analysis.clusters.length} highPriority={highPriority} stats={analysis.stats} />
 			</div>
 
-			<StatsBar clusters={analysis.clusters.length} highPriority={highPriority} stats={analysis.stats} />
-
-			{/* Three columns from xl: the list to pick from, the network, the card to defend it with. All
-			    three share one viewport-derived height so the whole board fits a 1366x768 laptop; each
-			    scrolls inside itself. Below xl they stack. */}
-			<div className="grid gap-3 xl:h-[calc(100dvh-14.25rem)] xl:min-h-[34rem] xl:grid-cols-[17rem_minmax(0,1fr)_21rem] 2xl:grid-cols-[20rem_minmax(0,1fr)_26rem]">
-				<div className="flex min-h-0 flex-col gap-3 max-xl:order-2">
-					<Panel className="min-h-0 flex-1" title="Топ приоритетных узлов" titleHint={TOP_HINT}>
-						<TopList
-							expanded={topExpanded}
-							onSelect={selectNode}
-							onToggleExpanded={() => setTopExpanded((previous) => !previous)}
-							rows={analysis.top}
-							selected={focus?.gid ?? null}
-						/>
-					</Panel>
-					<Panel className="shrink-0" title="Распределение ролей">
-						<RoleDonut counts={roleCounts} total={analysis.nodes.length} />
-					</Panel>
-				</div>
-
-				<Panel
-					action={
+			{/* Graph first: from lg the network takes the width and the viewport's height (a 1366x768
+			    laptop sees the whole board without scrolling), and one tabbed panel sits beside it. Below
+			    lg they stack. */}
+			<div className="grid gap-3 lg:h-[calc(100dvh-9.25rem)] lg:min-h-[32rem] lg:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_26rem]">
+				<section
+					aria-label="Сеть переводов"
+					className="border-border bg-surface flex min-h-0 min-w-0 flex-col gap-2 rounded-lg border p-3"
+				>
+					<div className="flex flex-wrap items-center gap-2">
+						<form className="flex min-w-0 flex-1 items-center gap-2" onSubmit={submit} role="search">
+							<Input
+								aria-label="gid узла"
+								className="max-w-xs min-w-0 flex-1"
+								inputMode="numeric"
+								maxLength={40}
+								onChange={(event) => setDraft(event.target.value)}
+								placeholder="gid, например 770410000000010822"
+								value={draft}
+							/>
+							<Button type="submit">Найти</Button>
+							{(focus !== null || highlightCluster !== null) && (
+								<Button onClick={clear} variant="ghost">
+									Сбросить
+								</Button>
+							)}
+						</form>
 						<SegmentedControl
 							name="graph-color-mode"
 							onChange={(value) => setColorMode(value === 'cluster' ? 'cluster' : 'role')}
 							options={COLOR_MODES}
 							value={colorMode}
 						/>
-					}
-					className="min-h-0 max-xl:order-1"
-					title="Сеть переводов"
-				>
-					<form className="flex items-center gap-2" onSubmit={submit} role="search">
-						<Input
-							aria-label="gid узла"
-							className="max-w-xs min-w-0 flex-1"
-							inputMode="numeric"
-							maxLength={40}
-							onChange={(event) => setDraft(event.target.value)}
-							placeholder="gid, например 770410000000010822"
-							value={draft}
-						/>
-						<Button type="submit">Найти</Button>
-						{(focus !== null || highlightCluster !== null) && (
-							<Button onClick={clear} variant="ghost">
-								Сбросить
-							</Button>
-						)}
-					</form>
+					</div>
 					{message !== null && <Callout tone="warning">{message}</Callout>}
 
 					{colorMode === 'role' ? (
@@ -274,8 +238,15 @@ function Screen({ analysis }: { analysis: Analysis }) {
 						<Legend clusters={analysis.clusters} colorMode={colorMode} nodes={analysis.nodes} />
 					)}
 
-					{/* Below xl the column has no fixed height, so the canvas takes its own from the viewport. */}
-					<div className="border-border bg-graph-bg relative h-[60dvh] min-h-[22rem] overflow-hidden rounded-md border xl:h-auto xl:min-h-0 xl:flex-1">
+					{/* Below lg the card has no fixed height, so the canvas takes its own from the viewport. */}
+					<div
+						className="border-border bg-graph-bg relative h-[60dvh] min-h-[22rem] overflow-hidden rounded-md border lg:h-auto lg:min-h-0 lg:flex-1"
+						title={CANVAS_HINT}
+					>
+						<p className="text-graph-label/60 tabular pointer-events-none absolute bottom-2 left-3 z-10 text-[11px]">
+							Показаны {formatInteger(shownCount)} из {formatInteger(analysis.nodes.length)} узлов
+							{hiddenRoles.has('peripheral') && ' · периферия скрыта'}
+						</p>
 						<CanvasErrorBoundary>
 							<GraphCanvas
 								analysis={analysis}
@@ -288,19 +259,17 @@ function Screen({ analysis }: { analysis: Analysis }) {
 							/>
 						</CanvasErrorBoundary>
 					</div>
-
-					<p className="text-fg-subtle text-[11px] leading-tight">
-						Стрелка — направление перевода, размер узла — приоритет проверки. Наведите на узел, чтобы увидеть
-						полный gid.
-					</p>
-				</Panel>
+				</section>
 
 				<Tabs.Root
-					className="border-border bg-surface flex min-h-0 min-w-0 flex-col rounded-lg border max-xl:order-3"
+					className="border-border bg-surface flex min-h-0 min-w-0 flex-col rounded-lg border"
 					onValueChange={(value) => setTab(value as PanelTab)}
 					value={tab}
 				>
-					<Tabs.List aria-label="Панель анализа" className="border-border flex shrink-0 gap-1 border-b px-3">
+					<Tabs.List aria-label="Панель анализа" className="border-border flex shrink-0 gap-0.5 border-b px-2">
+						<Tabs.Trigger className={TAB_TRIGGER} title={TOP_HINT} value="top">
+							Топ
+						</Tabs.Trigger>
 						<Tabs.Trigger className={TAB_TRIGGER} value="node">
 							Узел
 						</Tabs.Trigger>
@@ -312,6 +281,15 @@ function Screen({ analysis }: { analysis: Analysis }) {
 						</Tabs.Trigger>
 					</Tabs.List>
 
+					<Tabs.Content className="flex max-h-[40rem] min-h-0 flex-col p-3 lg:max-h-none lg:flex-1" value="top">
+						<TopList
+							expanded={topExpanded}
+							onSelect={selectNode}
+							onToggleExpanded={() => setTopExpanded((previous) => !previous)}
+							rows={analysis.top}
+							selected={focus?.gid ?? null}
+						/>
+					</Tabs.Content>
 					<Tabs.Content className={TAB_CONTENT} value="node">
 						{focusedNode !== undefined && card !== null ? (
 							<NodeCard
@@ -327,7 +305,7 @@ function Screen({ analysis }: { analysis: Analysis }) {
 								<CursorArrowRaysIcon aria-hidden className="text-fg-subtle size-8" />
 								<p className="text-fg text-sm font-medium">Узел не выбран</p>
 								<p className="text-fg-muted text-xs">
-									Выберите узел на графе, в топ-листе слева или найдите его по gid — здесь появятся роль,
+									Выберите узел на графе, во вкладке «Топ» или найдите его по gid — здесь появятся роль,
 									доказательства и крупнейшие контрагенты.
 								</p>
 							</div>
@@ -339,7 +317,7 @@ function Screen({ analysis }: { analysis: Analysis }) {
 					{/* Force-mounted and hidden when inactive: Radix unmounts inactive tabs, which would throw
 					    away the conversation every time the analyst glanced at a card. */}
 					<Tabs.Content
-						className="h-[40rem] min-h-0 p-3 data-[state=inactive]:hidden xl:h-auto xl:flex-1"
+						className="h-[40rem] min-h-0 p-3 data-[state=inactive]:hidden lg:h-auto lg:flex-1"
 						forceMount
 						value="assistant"
 					>

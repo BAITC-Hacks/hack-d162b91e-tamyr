@@ -44,7 +44,7 @@ export function TopList({ expanded, onSelect, onToggleExpanded, rows, selected }
 	const max = Math.max(...rows.map((row) => row.priorityScore), 0.0001);
 
 	return (
-		<div className="flex min-h-0 flex-col gap-2">
+		<div className="flex min-h-0 flex-1 flex-col gap-2">
 			<ol aria-label="Топ-лист: кого проверять первым" className="flex min-h-0 flex-col overflow-y-auto">
 				{shown.map((row) => {
 					const tone = priorityTone(row.priorityScore);

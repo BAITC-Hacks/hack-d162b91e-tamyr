@@ -27,13 +27,13 @@ export interface GraphEdgeAttributes {
 	size: number;
 	/** The transfer amount, so a focused node labels its largest counterparties first. */
 	sumKzt: number;
-	type: 'curvedArrow';
+	type: 'arrow';
 }
 
 export type MoneyGraph = DirectedGraph<GraphNodeAttributes, GraphEdgeAttributes>;
 
 /** Pixels at the default zoom. The top of the priority list must stand out from two thousand dots. */
-export const NODE_SIZE = { max: 12.5, min: 1.5 } as const;
+export const NODE_SIZE = { max: 15, min: 1.2 } as const;
 export const EDGE_SIZE = { max: 1.6, min: 0.3 } as const;
 
 /**
@@ -97,7 +97,7 @@ export function buildGraph(analysis: Pick<Analysis, 'edges' | 'nodes'>): MoneyGr
 		// An edge to a node that is not in the list would make graphology invent a node with no
 		// position, and sigma refuses to render one. Skip it rather than lose the whole picture.
 		if (graph.hasNode(edge.src) && graph.hasNode(edge.dst)) {
-			graph.mergeEdge(edge.src, edge.dst, { size: sizeOf(edge.sumKzt), sumKzt: edge.sumKzt, type: 'curvedArrow' });
+			graph.mergeEdge(edge.src, edge.dst, { size: sizeOf(edge.sumKzt), sumKzt: edge.sumKzt, type: 'arrow' });
 		}
 	}
 

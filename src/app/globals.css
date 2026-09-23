@@ -419,6 +419,7 @@
 	--color-role-terminal: var(--color-role-terminal);
 	--color-role-peripheral: var(--color-role-peripheral);
 	--color-graph-bg: var(--color-graph-bg);
+	--color-graph-label: var(--color-graph-label);
 
 	/* docs/design-system.md §8: 120–180ms, ease-out. Tailwind's own defaults are 150ms — inside the range —
      with `cubic-bezier(0.4, 0, 0.2, 1)`, which is ease-in-out: it starts slow, so a hover

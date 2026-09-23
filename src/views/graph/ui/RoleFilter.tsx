@@ -25,22 +25,24 @@ export function RoleFilter({ counts, hidden, onToggle }: RoleFilterProps) {
 						<button
 							aria-pressed={shown}
 							className={clsx(
-								'inline-flex h-6 items-center gap-1.5 rounded-full border px-2 text-xs whitespace-nowrap transition-colors',
+								'inline-flex h-5 items-center gap-1 rounded-full border px-1.5 text-[11px] whitespace-nowrap transition-colors',
 								shown
 									? 'border-border-strong bg-surface-raised text-fg hover:bg-surface-hover'
 									: 'border-border text-fg-subtle hover:text-fg-muted border-dashed bg-transparent',
 							)}
 							onClick={() => onToggle(role)}
-							title={`${ROLE_LABELS[role]}: ${ROLE_HINTS[role]}. ${shown ? 'Скрыть' : 'Показать'} на графе.`}
+							title={`${ROLE_LABELS[role]} (${formatInteger(counts.get(role) ?? 0)}): ${ROLE_HINTS[role]}. ${shown ? 'Скрыть' : 'Показать'} на графе.`}
 							type="button"
 						>
 							{shown ? (
-								<span aria-hidden className={clsx('size-2.5 shrink-0 rounded-full', ROLE_CHIP_CLASS[role])} />
+								<span aria-hidden className={clsx('size-2 shrink-0 rounded-full', ROLE_CHIP_CLASS[role])} />
 							) : (
-								<span aria-hidden className="border-fg-subtle size-2.5 shrink-0 rounded-full border" />
+								<span aria-hidden className="border-fg-subtle size-2 shrink-0 rounded-full border" />
 							)}
 							<span className={clsx(!shown && 'line-through')}>{ROLE_LABELS[role]}</span>
-							<span className="text-fg-muted tabular">{formatInteger(counts.get(role) ?? 0)}</span>
+							<span className="text-fg-muted tabular hidden 2xl:inline">
+								{formatInteger(counts.get(role) ?? 0)}
+							</span>
 						</button>
 					</li>
 				);

@@ -1,4 +1,3 @@
-import { createEdgeCurveProgram } from '@sigma/edge-curve';
 import { createNodeBorderProgram } from '@sigma/node-border';
 import { type NodeHoverDrawingFunction } from 'sigma/rendering';
 import { type GraphEdgeAttributes, type GraphNodeAttributes } from './buildGraph';
@@ -6,38 +5,72 @@ import { type GraphEdgeAttributes, type GraphNodeAttributes } from './buildGraph
 /**
  * The drawing pieces of the neon canvas: the glow program, colour alpha, and the hover label.
  *
- * Glow is a disc drawn as three concentric layers — a faint outer halo, a brighter inner ring, and
- * the node itself — by `@sigma/node-border`. A glowing node is drawn larger by `1 / GLOW_CORE`, so
- * its core keeps the size the priority gave it and the halo is extra.
+ * Sigma blends with `ONE, ONE_MINUS_SRC_ALPHA` — it expects **premultiplied** colours. A plain
+ * `#rrggbbaa` is therefore added at full strength, which is why a translucent halo used to burn
+ * white where discs overlapped. Every colour handed to sigma goes through `withAlpha` / `glowColor`,
+ * which premultiply; `glowColor` also lowers the alpha byte below the colour, so halos add light
+ * (the neon look) instead of covering what is behind them.
+ *
+ * Glow is a disc drawn as four concentric layers by `@sigma/node-border`: three halo rings that fade
+ * outwards in the node's own colour, and the node itself. A glowing node is drawn larger by
+ * `1 / GLOW_CORE`, so its core keeps the size the priority gave it and the halo is extra.
  */
 
 /** The share of a glowing disc's radius that is the node itself; the rest is halo. */
-export const GLOW_CORE = 0.62;
+export const GLOW_CORE = 0.5;
 
 export const GlowNodeProgram = createNodeBorderProgram<GraphNodeAttributes, GraphEdgeAttributes>({
 	borders: [
-		{ color: { attribute: 'glowOuter', defaultValue: '#00000000' }, size: { mode: 'relative', value: 0.24 } },
-		{ color: { attribute: 'glowInner', defaultValue: '#00000000' }, size: { mode: 'relative', value: 0.14 } },
+		{ color: { attribute: 'glow3', defaultValue: '#00000000' }, size: { mode: 'relative', value: 0.2 } },
+		{ color: { attribute: 'glow2', defaultValue: '#00000000' }, size: { mode: 'relative', value: 0.16 } },
+		{ color: { attribute: 'glow1', defaultValue: '#00000000' }, size: { mode: 'relative', value: 0.14 } },
 		{ color: { attribute: 'color' }, size: { fill: true } },
 	],
 });
 
-/** Money flows along a gentle arc; the arrowhead at the receiver says which way. */
-export const CurvedArrowProgram = createEdgeCurveProgram<GraphNodeAttributes, GraphEdgeAttributes>({
-	arrowHead: { extremity: 'target', lengthToThicknessRatio: 2.5, widenessToThicknessRatio: 2 },
-	curvatureAttribute: 'curvature',
-	defaultCurvature: 0.22,
-});
+function channels(color: string): [number, number, number, number] | null {
+	const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})([\da-f]{2})?$/i.exec(color);
 
-/** `#rrggbb` with an alpha byte appended; anything else is returned as it came. */
+	if (match === null) return null;
+
+	const [, red = '0', green = '0', blue = '0', alpha = 'ff'] = match;
+
+	return [parseInt(red, 16), parseInt(green, 16), parseInt(blue, 16), parseInt(alpha, 16) / 255];
+}
+
+function hex(values: readonly number[]): string {
+	return `#${values
+		.map((value) =>
+			Math.round(Math.min(255, Math.max(0, value)))
+				.toString(16)
+				.padStart(2, '0'),
+		)
+		.join('')}`;
+}
+
+/**
+ * The colour at `alpha` (multiplied into any alpha it already has), premultiplied for sigma.
+ * `additive` in 0–1 lowers the alpha byte further, so the colour adds light over what is behind.
+ */
+export function light(color: string, { additive = 0, alpha }: { additive?: number; alpha: number }): string {
+	const parsed = channels(color);
+
+	if (parsed === null) return color;
+
+	const [red, green, blue, own] = parsed;
+	const k = Math.min(1, Math.max(0, alpha)) * own;
+
+	return hex([red * k, green * k, blue * k, 255 * k * (1 - additive)]);
+}
+
+/** The colour at `alpha`, premultiplied for sigma, covering what is behind it. */
 export function withAlpha(color: string, alpha: number): string {
-	if (!/^#[\da-f]{6}$/i.test(color)) return color;
+	return light(color, { alpha });
+}
 
-	const byte = Math.round(Math.min(1, Math.max(0, alpha)) * 255)
-		.toString(16)
-		.padStart(2, '0');
-
-	return `${color}${byte}`;
+/** A halo ring in the node's own colour: premultiplied and half additive. */
+export function glowColor(color: string, intensity: number): string {
+	return light(color, { additive: 0.5, alpha: intensity });
 }
 
 /**

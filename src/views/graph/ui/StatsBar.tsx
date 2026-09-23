@@ -1,15 +1,5 @@
-import {
-	ArrowsRightLeftIcon,
-	BanknotesIcon,
-	ExclamationTriangleIcon,
-	FlagIcon,
-	RectangleGroupIcon,
-	ShareIcon,
-} from '@heroicons/react/24/outline';
 import { type AnalysisStats } from '@server/graph/model/graph.schema';
-import { type ComponentType, type SVGProps } from 'react';
 import {
-	formatDate,
 	formatInteger,
 	formatKzt,
 	formatKztCompact,
@@ -19,7 +9,9 @@ import {
 } from '../model/format';
 
 /**
- * The size of what is on screen, as a row of KPI cards: the first thing the jury reads.
+ * The size of what is on screen, as one thin line of four figures beside the page title: the graph
+ * is the screen, so the numbers take a line, not a row of cards. The rest — links, clusters, seeds,
+ * the period — sits in each figure's tooltip.
  *
  * Every figure is a count or a sum from the analysis itself. There are no period-over-period deltas,
  * because the case has one month and a delta would be invented.
@@ -31,11 +23,9 @@ export interface StatsBarProps {
 }
 
 interface Kpi {
-	caption: string;
-	chip: string;
-	Icon: ComponentType<SVGProps<SVGSVGElement>>;
+	accent?: boolean;
 	label: string;
-	title?: string;
+	title: string;
 	value: string;
 }
 
@@ -43,73 +33,34 @@ export function StatsBar({ clusters, highPriority, stats }: StatsBarProps) {
 	const period = formatPeriod(stats.periodFrom, stats.periodTo);
 	const items: Kpi[] = [
 		{
-			caption: `${formatInteger(stats.edges)} связей`,
-			chip: 'bg-identity-1-bg text-identity-1',
-			Icon: ShareIcon,
 			label: 'Узлов',
+			title: `${formatInteger(stats.nodes)} участников, ${formatInteger(stats.edges)} связей, ${formatInteger(clusters)} кластеров, ${formatInteger(stats.seeds)} seed`,
 			value: formatInteger(stats.nodes),
 		},
+		{ label: 'Операций', title: `Переводы за ${period}`, value: formatInteger(stats.transactions) },
+		{ label: 'Оборот', title: `${formatKzt(stats.totalKzt)} за ${period}`, value: formatKztCompact(stats.totalKzt) },
 		{
-			caption: period,
-			chip: 'bg-identity-3-bg text-identity-3',
-			Icon: ArrowsRightLeftIcon,
-			label: 'Операций',
-			value: formatInteger(stats.transactions),
-		},
-		{
-			caption: period,
-			chip: 'bg-identity-2-bg text-identity-2',
-			Icon: BanknotesIcon,
-			label: 'Оборот',
-			title: formatKzt(stats.totalKzt),
-			value: formatKztCompact(stats.totalKzt),
-		},
-		{
-			caption: 'гипотезы',
-			chip: 'bg-identity-4-bg text-identity-4',
-			Icon: RectangleGroupIcon,
-			label: 'Кластеров',
-			value: formatInteger(clusters),
-		},
-		{
-			caption: `приоритет ≥ ${formatScore(HIGH_PRIORITY_CUT)}`,
-			chip: 'bg-danger-bg text-danger',
-			Icon: ExclamationTriangleIcon,
+			accent: true,
 			label: 'Приоритетных',
-			title: `Высокий приоритет: узлы с приоритетом проверки не ниже ${formatScore(HIGH_PRIORITY_CUT)} из 1. Приоритет — очерёдность проверки, а не вывод о виновности.`,
+			title: `Узлы с приоритетом проверки не ниже ${formatScore(HIGH_PRIORITY_CUT)} из 1. Приоритет — очерёдность проверки, а не вывод о виновности.`,
 			value: formatInteger(highPriority),
-		},
-		{
-			caption: 'истоки обхода',
-			chip: 'bg-accent-subtle text-accent-fg',
-			Icon: FlagIcon,
-			label: 'Seed',
-			title: `Период выгрузки: ${formatDate(stats.periodFrom)} – ${formatDate(stats.periodTo)}`,
-			value: formatInteger(stats.seeds),
 		},
 	];
 
 	return (
-		<dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+		<dl className="flex flex-wrap items-baseline gap-x-5 gap-y-1">
 			{items.map((item) => (
-				<div
-					className="border-border bg-surface flex min-w-0 items-center gap-2.5 rounded-lg border px-3 py-2.5 2xl:gap-3 2xl:px-3.5"
-					key={item.label}
-					title={item.title}
-				>
-					<span
-						aria-hidden
-						className={`flex size-8 shrink-0 items-center justify-center rounded-md 2xl:size-9 ${item.chip}`}
+				<div className="flex items-baseline gap-1.5" key={item.label} title={item.title}>
+					<dt className="text-fg-muted text-xs">{item.label}</dt>
+					<dd
+						className={
+							item.accent === true
+								? 'text-danger tabular text-sm font-semibold whitespace-nowrap'
+								: 'text-fg tabular text-sm font-semibold whitespace-nowrap'
+						}
 					>
-						<item.Icon className="size-5" />
-					</span>
-					<div className="min-w-0">
-						<dt className="text-fg-muted truncate text-xs">{item.label}</dt>
-						<dd className="text-fg tabular text-base leading-tight font-semibold whitespace-nowrap">
-							{item.value}
-						</dd>
-						<dd className="text-fg-subtle truncate text-[11px] leading-tight">{item.caption}</dd>
-					</div>
+						{item.value}
+					</dd>
 				</div>
 			))}
 		</dl>

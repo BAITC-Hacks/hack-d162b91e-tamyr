@@ -5,7 +5,7 @@ import { type Analysis, type Role } from '@server/graph/model/graph.schema';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type Settings } from 'sigma/settings';
 import { buildGraph, type GraphEdgeAttributes, type GraphNodeAttributes, type MoneyGraph } from '../model/buildGraph';
-import { createDrawHover, CurvedArrowProgram, GLOW_CORE, GlowNodeProgram, withAlpha } from '../model/canvasStyle';
+import { createDrawHover, GLOW_CORE, glowColor, GlowNodeProgram, light, withAlpha } from '../model/canvasStyle';
 import { type MoneyPathView, pathEdgeKey } from '../model/canvasTypes';
 import { type ColorMode, type Focus } from '../model/focus';
 import { clusterSlot } from '../model/roles';
@@ -23,7 +23,8 @@ import { type GraphPalette, usePalette } from '../model/usePalette';
  * through `useSetSettings` as reducers, which repaint without rebuilding.
  *
  * The look is a night sky: the canvas is dark in both themes, the top of the priority list glows in
- * its role colour, edges are curved streams in their sender's colour, and the periphery is dust.
+ * its role colour, edges are straight streams in their sender's colour, and the periphery is dust
+ * (hidden by default; still drawn when it is part of a focused neighbourhood or a money path).
  * One "active set" decides what is lit — the money path if there is one, else the hovered node's
  * neighbourhood, else the focused node's, else the highlighted cluster — and everything outside it
  * recedes.
@@ -45,8 +46,7 @@ type CanvasSettings = Partial<Settings<GraphNodeAttributes, GraphEdgeAttributes>
 type CanvasSigma = ReturnType<typeof useSigma<GraphNodeAttributes, GraphEdgeAttributes>>;
 
 const SETTINGS: CanvasSettings = {
-	defaultEdgeType: 'curvedArrow',
-	edgeProgramClasses: { curvedArrow: CurvedArrowProgram },
+	defaultEdgeType: 'arrow',
 	// Two thousand labels are noise. The overview labels only the top of the priority list — sigma's
 	// collision grid keeps one label per cell — and zooming in brings the rest.
 	labelDensity: 0.25,
@@ -67,12 +67,14 @@ const SETTINGS: CanvasSettings = {
 const FOCUS_LABELS = 5;
 /** A node that is not in focus shrinks to this share of its size, so it recedes rather than blots. */
 const DIM_SIZE = 0.4;
-/** The top of the priority list that glows. */
+/** The top of the priority list that glows brightest. */
 const GLOW_TOP = 20;
+/** The overview labels only the very top of the priority list. */
+const LABEL_TOP = 8;
 /** Peripheral nodes are most of the graph: smaller, so they read as dust around the structure. */
 const PERIPHERAL_SIZE = 0.75;
 /** Edge alpha by state: faint streams in the overview, bright in the lit neighbourhood. */
-const EDGE_ALPHA = { active: 0.85, overview: 0.22, path: 1, peripheral: 0.1 } as const;
+const EDGE_ALPHA = { active: 0.8, overview: 0.38, path: 1, peripheral: 0.08 } as const;
 
 const CONTAINER_STYLE = { background: 'transparent', height: '100%', width: '100%' } as const;
 
@@ -103,16 +105,32 @@ function largestCounterparties(graph: MoneyGraph, focused: string): string[] {
 		.map(([node]) => node);
 }
 
-/** A node drawn with a halo in its colour; the core keeps its size, the halo is extra. */
-function glowing(data: GraphNodeAttributes, { color, core }: { color: string; core: number }) {
+/** Halo intensities, inner ring to outer: a soft one for every coloured node, a strong one for the top. */
+const GLOW = { soft: [0.42, 0.2, 0.08], strong: [0.7, 0.34, 0.13] } as const;
+
+/** A node drawn with a halo in its own colour; the core keeps its size, the halo is extra. */
+function glowing(
+	data: GraphNodeAttributes,
+	{ color, core, strength = 'strong' }: { color: string; core: number; strength?: keyof typeof GLOW },
+) {
+	const [inner, middle, outer] = GLOW[strength];
+
 	return {
 		...data,
 		color,
-		glowInner: withAlpha(color, 0.4),
-		glowOuter: withAlpha(color, 0.13),
+		glow1: glowColor(color, inner),
+		glow2: glowColor(color, middle),
+		glow3: glowColor(color, outer),
 		size: core / GLOW_CORE,
 		type: 'glow',
 	};
+}
+
+/** Top of the list glows strongly, the rest of the coloured nodes softly, the periphery not at all. */
+function lit(data: GraphNodeAttributes, color: string) {
+	if (data.role === 'peripheral') return { ...data, color };
+
+	return glowing(data, { color, core: data.size, strength: data.rank < GLOW_TOP ? 'strong' : 'soft' });
 }
 
 /** Fly the camera to fit a set of nodes. */
@@ -180,12 +198,17 @@ function Controller({
 		const neighbours = new Set(centre === null ? [] : graph.neighbors(centre));
 		const labelled = new Set(centre === null ? [] : largestCounterparties(graph, centre));
 		const inCluster = (node: string) => graph.getNodeAttribute(node, 'clusterId') === highlightCluster;
-		const isHidden = (node: string) => hiddenRoles?.has(graph.getNodeAttribute(node, 'role')) ?? false;
 		const revealed = (node: string) => {
 			const hop = activePath?.hops.get(node);
 
 			return activePath !== null && hop !== undefined && hop <= activePath.revealedHop;
 		};
+		// Hidden roles hide only the context: a node in the focused neighbourhood or on the money path is
+		// drawn whatever its role, or a peripheral counterparty would vanish from under its own card.
+		const inFocus = (node: string) =>
+			activePath === null ? node === centre || node === focused || neighbours.has(node) : revealed(node);
+		const isHidden = (node: string) =>
+			(hiddenRoles?.has(graph.getNodeAttribute(node, 'role')) ?? false) && !inFocus(node);
 		const sourceColor = (node: string) =>
 			nodeColor(palette, { attributes: graph.getNodeAttributes(node), mode: colorMode });
 
@@ -195,27 +218,39 @@ function Controller({
 				const source = graph.source(edge);
 				const target = graph.target(edge);
 
-				if (isHidden(source) || isHidden(target)) return { ...data, hidden: true };
-
 				const color = sourceColor(source);
+
+				if (activePath === null && centre === null && (isHidden(source) || isHidden(target))) {
+					return { ...data, hidden: true };
+				}
 
 				if (activePath !== null) {
 					const onPath = activePath.edges.has(pathEdgeKey(source, target)) && revealed(source) && revealed(target);
 
 					return onPath
-						? { ...data, color: withAlpha(color, EDGE_ALPHA.path), size: data.size * 2 + 1.5, zIndex: 2 }
+						? {
+								...data,
+								color: light(color, { additive: 0.2, alpha: EDGE_ALPHA.path }),
+								size: data.size * 2 + 1.5,
+								zIndex: 2,
+							}
 						: { ...data, hidden: true };
 				}
 
 				if (centre !== null) {
 					return source === centre || target === centre
-						? { ...data, color: withAlpha(color, EDGE_ALPHA.active), size: data.size * 1.6 + 0.4, zIndex: 1 }
+						? {
+								...data,
+								color: light(color, { additive: 0.3, alpha: EDGE_ALPHA.active }),
+								size: data.size * 1.6 + 0.4,
+								zIndex: 1,
+							}
 						: { ...data, hidden: true };
 				}
 
 				if (highlightCluster !== null) {
 					return inCluster(source) && inCluster(target)
-						? { ...data, color: withAlpha(color, EDGE_ALPHA.active), zIndex: 1 }
+						? { ...data, color: light(color, { additive: 0.3, alpha: EDGE_ALPHA.active }), zIndex: 1 }
 						: { ...data, hidden: true };
 				}
 
@@ -223,8 +258,8 @@ function Controller({
 
 				return {
 					...data,
-					color: withAlpha(color, peripheral ? EDGE_ALPHA.peripheral : EDGE_ALPHA.overview),
-					size: data.size * 0.8,
+					color: light(color, { additive: 0.5, alpha: peripheral ? EDGE_ALPHA.peripheral : EDGE_ALPHA.overview }),
+					size: data.size,
 				};
 			},
 			labelColor: { color: palette.label },
@@ -232,7 +267,13 @@ function Controller({
 				if (isHidden(node)) return { ...data, hidden: true };
 
 				const color = nodeColor(palette, { attributes: data, mode: colorMode });
-				const dimmed = { ...data, color: palette.dim, label: null, size: data.size * DIM_SIZE, zIndex: 0 };
+				const dimmed = {
+					...data,
+					color: withAlpha(palette.dim, 1),
+					label: null,
+					size: data.size * DIM_SIZE,
+					zIndex: 0,
+				};
 				// The hovered node shows its whole gid; everywhere else the canvas prints the short one.
 				const shown = node === hovered ? { forceLabel: true, label: node, zIndex: 4 } : null;
 
@@ -254,9 +295,7 @@ function Controller({
 						return { ...glowing(data, { color, core }), forceLabel: true, zIndex: 3, ...shown };
 					}
 					if (neighbours.has(node)) {
-						const lit = data.rank < GLOW_TOP ? glowing(data, { color, core: data.size }) : { ...data, color };
-
-						return { ...lit, forceLabel: labelled.has(node), zIndex: 2, ...shown };
+						return { ...lit(data, color), forceLabel: labelled.has(node), zIndex: 2, ...shown };
 					}
 					// While hovering elsewhere, the focused node stays visible so the user keeps their place.
 					if (node === focused) return { ...glowing(data, { color, core: data.size }), zIndex: 1 };
@@ -267,17 +306,24 @@ function Controller({
 				if (highlightCluster !== null) {
 					if (data.clusterId !== highlightCluster) return dimmed;
 
-					const lit = data.rank < GLOW_TOP ? glowing(data, { color, core: data.size }) : { ...data, color };
-
-					return { ...lit, zIndex: 1, ...shown };
+					return { ...lit(data, color), zIndex: 1, ...shown };
 				}
 
-				if (data.rank < GLOW_TOP) return { ...glowing(data, { color, core: data.size }), zIndex: 2, ...shown };
+				// The overview names only the very top; the rest have their gid on hover.
+				const label = data.rank < LABEL_TOP ? { forceLabel: true } : { label: null };
+
 				if (data.role === 'peripheral') {
-					return { ...data, color, size: data.size * PERIPHERAL_SIZE, zIndex: 0, ...shown };
+					return {
+						...data,
+						color: withAlpha(color, 0.7),
+						size: data.size * PERIPHERAL_SIZE,
+						zIndex: 0,
+						...label,
+						...shown,
+					};
 				}
 
-				return { ...data, color, zIndex: 1, ...shown };
+				return { ...lit(data, color), zIndex: data.rank < GLOW_TOP ? 2 : 1, ...label, ...shown };
 			},
 		});
 	}, [activePath, colorMode, focusedGid, hiddenRoles, highlightCluster, hovered, palette, setSettings, sigma]);
@@ -353,7 +399,7 @@ export function GraphCanvas({ analysis, ...props }: GraphCanvasProps) {
 		<SigmaContainer<GraphNodeAttributes, GraphEdgeAttributes>
 			// react-sigma's own stylesheet is not imported — it hard-codes white grounds on :root — so
 			// the one rule that matters from it is here: sigma refuses a container with no height.
-			className="[&_.sigma-container]:h-full [&_.sigma-container]:w-full"
+			className="[&_.sigma-container]:h-full [&_.sigma-container]:w-full [&_.sigma-nodes]:[filter:saturate(1.3)_drop-shadow(0_0_5px_rgb(255_255_255/0.18))]"
 			graph={graph}
 			settings={SETTINGS}
 			style={CONTAINER_STYLE}
