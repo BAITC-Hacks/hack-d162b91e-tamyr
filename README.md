@@ -66,11 +66,14 @@ pnpm dev                      # http://localhost:3000
    `output/top_nodes.csv` — **не менее 20**, в `output/clusters.csv` — строка на кластер с гипотезой.
    Например: `node -e "console.log(require('fs').readFileSync('output/nodes_roles.csv','utf8').trim().split('\n').length - 1)"`
    печатает `2248`.
-3. `pnpm dev` и открыть <http://localhost:3000>: сеть раскрашена по ролям, стрелки показывают
-   направление денег, рядом — топ-лист.
+3. `pnpm dev` и открыть <http://localhost:3000> (лучше в тёмной теме — кнопка «Dark»): сеть
+   раскрашена по ролям, стрелки показывают направление денег, размер — приоритет. Периферия (80%
+   узлов) скрыта по умолчанию — чип «Периферийный» включает её; справа вкладка «Топ».
 4. Ввести любой gid из `nodes_roles.csv` в поиск: узел фокусируется, соседи подсвечиваются,
-   открывается карточка — метрики, роль, `evidence`, крупнейшие входящие и исходящие контрагенты.
-5. Открыть топ-лист и кластеры; клик по gid фокусирует узел на графе.
+   открывается карточка — роль и сила правила, `evidence`, метрики, крупнейшие контрагенты.
+5. В карточке нажать **«Показать путь денег»**: граф по коленам подсвечивает маршрут от seed к
+   узлу, внизу — итог («деньги могли дойти за N колен от K seed»). Вкладка «Кластеры» — клик по
+   кластеру подсвечивает его на графе.
 6. Спросить ассистента **«кого проверять первым и почему?»**, затем **«кто собирает деньги с этих
    пятерых?»** (и, по желанию, «что если убрать первых пятерых?»). В панели активности видно каждый
    вызов инструмента: имя, аргументы, результат и время. Ответ собран из результатов инструментов.
@@ -193,14 +196,17 @@ inherited from the starter template and are not used by this product.
    node -e "console.log(require('fs').readFileSync('output/nodes_roles.csv','utf8').trim().split('\n').length - 1)"
    ```
 
-3. **Open the screen:** `pnpm dev`, then <http://localhost:3000>. The network is coloured by role
-   (toggle to colour by cluster), arrows show the direction of money, and size follows priority. A
-   legend names every colour.
+3. **Open the screen:** `pnpm dev`, then <http://localhost:3000> (the dark theme shows it best).
+   The network is coloured by role (toggle to colour by cluster), arrows show the direction of
+   money, and size follows priority. Role chips above the canvas name every colour and toggle a role;
+   the peripheral role (80% of nodes) is hidden by default. The right panel opens on «Топ», the
+   priority list.
 4. **Find a gid:** paste any gid from `nodes_roles.csv` into the search. The node is focused, its
-   neighbours are highlighted and its card opens: metrics, role, `evidence`, and the largest senders
-   and receivers.
-5. **Open the top list** (Топ-лист) and the clusters (Кластеры). Clicking a gid focuses it on the
-   graph.
+   neighbours are highlighted (even hidden peripheral ones) and its card opens: role and rule
+   strength, `evidence`, metrics, and the largest senders and receivers.
+5. **Show the money path:** «Показать путь денег» on the card reverse-traces the strongest incoming
+   edges up to the seeds and reveals the route on the graph hop by hop, with a one-line summary
+   phrased as a route hypothesis. The «Кластеры» tab highlights a cluster on the graph.
 6. **Ask the assistant** «кого проверять первым и почему?», then «кто собирает деньги с этих
    пятерых?», optionally «что если убрать первых пятерых?». The activity panel shows every tool call
    — which tool, its arguments, its result and its duration — and the answer is composed from those
@@ -533,6 +539,7 @@ uses no model at all.
 | `graphology-communities-louvain`           | Louvain clustering                         | MIT          |
 | `graphology-layout-forceatlas2`            | Precomputed layout                         | MIT          |
 | `sigma`, `@react-sigma/core`               | WebGL network rendering                    | MIT          |
+| `@sigma/node-border`, `@sigma/edge-curve`  | Node halos (glow); curved edges (installed, currently unused) | MIT |
 | `next`, `react`, `react-dom`               | Application framework                      | MIT          |
 | `radix-ui`, `@heroicons/react`, `clsx`     | UI primitives, icons, class names          | MIT          |
 | `tailwindcss` (dev)                        | Styling                                    | MIT          |
