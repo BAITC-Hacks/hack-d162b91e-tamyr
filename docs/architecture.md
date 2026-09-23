@@ -14,8 +14,6 @@ no cache tier. PostgreSQL is the source of truth. Prisma is the only way to reac
 | Database     | PostgreSQL                                                 |
 | ORM          | Prisma + `prisma migrate`, hand-edited SQL where needed     |
 | Validation   | Zod, one schema shared by client and server                |
-| Forms        | React Hook Form where a form benefits from it              |
-| Dates        | date-fns                                                   |
 | Mutations    | Server Actions; Route Handlers for webhooks and public APIs |
 | Tests        | Vitest, with a real PostgreSQL for integration             |
 | Local dev    | Docker Compose for the database; the app runs natively      |

@@ -36,14 +36,11 @@
 	},
 	"dependencies": {
 		"@heroicons/react": "^2.2.0",
-		"@hookform/resolvers": "^5.9.1",
 		"@prisma/adapter-pg": "7.10.0",
 		"@prisma/client": "7.10.0",
 		"@react-sigma/core": "^5.0.6",
-		"@sigma/edge-curve": "^3.1.0",
 		"@sigma/node-border": "^3.0.0",
 		"clsx": "^2.1.1",
-		"date-fns": "^4.4.0",
 		"dotenv": "^17.4.2",
 		"graphology": "^0.26.0",
 		"graphology-communities-louvain": "^2.0.2",
@@ -55,7 +52,6 @@
 		"radix-ui": "^1.6.7",
 		"react": "19.1.1",
 		"react-dom": "19.1.1",
-		"react-hook-form": "^7.88.0",
 		"server-only": "^0.0.1",
 		"sigma": "^3.0.3",
 		"zod": "^4.6.5"

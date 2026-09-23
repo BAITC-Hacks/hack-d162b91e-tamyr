@@ -311,6 +311,9 @@ thresholds also exported in `analysis.json`):
 | `split` (дробление сумм) | one sender made ≥ 3 transfers to the node on the same day, all within ±10% of their median | 6 |
 | `sync_inflow` (синхронный приход) | on some day the node received from ≥ 3 distinct payers | 38 |
 | `cycle` (возвратный поток) | the node lies on a directed cycle of length ≤ 6 — money comes back | 303 |
+| `repeat_route` (повторяющийся маршрут) | middle node B of a chain A→B→C with ≥ 2 transfers on both links, and on ≥ 2 dates B forwarded to C within 2 days of receiving from A | 54 |
+| `burst` (всплеск активности) | on some day the node had ≥ 3 transactions and ≥ 3× its mean daily count (needs ≥ 2 active days) | 10 |
+| `depth_outlier` (аномальный профиль для колена) | turnover `log1p(in+out)` at or above the 95th percentile of nodes at the same depth (strata ≥ 20 nodes) | 120 |
 | `fast_transit` (быстрый транзит) | ≥ 50% of outgoing KZT left within 2 days of an incoming transfer | 275 |
 | `truncated` | depth 4 with no outgoing transfers (see Roles) | 444 |
 
@@ -556,17 +559,15 @@ uses no model at all.
 | `graphology-communities-louvain`           | Louvain clustering                         | MIT          |
 | `graphology-layout-forceatlas2`            | Precomputed layout                         | MIT          |
 | `sigma`, `@react-sigma/core`               | WebGL network rendering                    | MIT          |
-| `@sigma/node-border`, `@sigma/edge-curve`  | Node halos (glow); curved edges (installed, currently unused) | MIT |
+| `@sigma/node-border`                       | Node halos (glow)                          | MIT          |
 | `next`, `react`, `react-dom`               | Application framework                      | MIT          |
 | `radix-ui`, `@heroicons/react`, `clsx`     | UI primitives, icons, class names          | MIT          |
 | `tailwindcss` (dev)                        | Styling                                    | MIT          |
 | `zod`                                      | Schemas and validation                     | MIT          |
 | `openai`                                   | OpenAI API client                          | Apache-2.0   |
-| `react-hook-form`, `@hookform/resolvers`   | Forms (starter)                            | MIT          |
-| `date-fns`                                 | Dates (starter)                            | MIT          |
 | `dotenv`                                   | Loading `.env`                             | BSD-2-Clause |
 | `server-only`                              | Server/client boundary guard               | MIT          |
-| `@prisma/client`, `@prisma/adapter-pg`     | Optional database (starter, unused here)   | Apache-2.0   |
+| `@prisma/client`, `@prisma/adapter-pg`     | Optional database layer of the starter; not used by this product (no `DATABASE_URL` needed), kept because the template's install step and tests depend on it | Apache-2.0 |
 
 Development tooling — TypeScript, ESLint and its plugins, Prettier, Vitest, tsx, Prisma CLI — each
 under its own licence, listed in `package.json`.

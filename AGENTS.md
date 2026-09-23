@@ -132,7 +132,7 @@ rule means two different answers to the same question.
 ### Stack
 
 Next.js (App Router) + React + TypeScript · Tailwind · Radix UI primitives · Heroicons · Zod ·
-React Hook Form · date-fns · the OpenAI SDK · Server Actions for authenticated mutations, Route
+the OpenAI SDK · graphology + Sigma.js · hyparquet · Server Actions for authenticated mutations, Route
 Handlers for webhooks and external APIs.
 
 Do not introduce a second backend framework, microservices, GraphQL, Kubernetes, Redis, Kafka, a
