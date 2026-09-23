@@ -8,12 +8,12 @@
 		"transactions": 4840
 	},
 	"durationsMs": {
-		"read": 80,
-		"analyze": 5734,
-		"write": 27,
-		"total": 5870
+		"read": 84,
+		"analyze": 5862,
+		"write": 28,
+		"total": 6020
 	},
-	"finishedAt": "2026-09-23T11:38:19.732Z",
+	"finishedAt": "2026-09-23T12:01:07.676Z",
 	"inputs": {
 		"nodes.parquet": "d2a45b0df6e9352832d5fb09839d10b9e23f898156c3bab263b051b31cc0296d",
 		"edges.parquet": "4e71dde5cd3115bcb26e91202665532ee6581cf8233a9fc8059ea59fb7358a38",
