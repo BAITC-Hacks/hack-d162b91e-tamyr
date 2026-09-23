@@ -40,6 +40,8 @@
 		"@prisma/adapter-pg": "7.10.0",
 		"@prisma/client": "7.10.0",
 		"@react-sigma/core": "^5.0.6",
+		"@sigma/edge-curve": "^3.1.0",
+		"@sigma/node-border": "^3.0.0",
 		"clsx": "^2.1.1",
 		"date-fns": "^4.4.0",
 		"dotenv": "^17.4.2",
