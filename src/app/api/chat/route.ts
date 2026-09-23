@@ -12,8 +12,8 @@ import { createCtx } from '@server/kernel/ctx';
  *
  * Errors come back as a written sentence, not a status code. The interface shows what this says.
  */
-const INVALID_REQUEST_MESSAGE = 'That message could not be read. Please try again.';
-const SERVER_ERROR_MESSAGE = 'The agent could not be reached. Please try again.';
+const INVALID_REQUEST_MESSAGE = 'Не удалось прочитать сообщение. Попробуйте отправить его ещё раз.';
+const SERVER_ERROR_MESSAGE = 'Ассистент сейчас недоступен. Попробуйте ещё раз через минуту.';
 
 export async function POST(request: Request): Promise<Response> {
 	let body: unknown;
