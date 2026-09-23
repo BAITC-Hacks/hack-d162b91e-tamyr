@@ -137,9 +137,9 @@ function Screen({ analysis }: { analysis: Analysis }) {
 	const card = focusedNode === undefined ? null : counterparties(index, focusedNode.gid);
 
 	return (
-		<div className="flex flex-col gap-4">
+		<div className="flex flex-col gap-3">
 			<div>
-				<h1 className="text-xl font-semibold">Граф денег</h1>
+				<h1 className="text-lg font-semibold">Граф денег</h1>
 				<p className="text-fg-muted text-sm">
 					Кого из {formatInteger(analysis.stats.nodes)} участников проверять первым и почему. Роли и кластеры —
 					гипотезы для проверки, а не выводы о виновности.
@@ -148,7 +148,7 @@ function Screen({ analysis }: { analysis: Analysis }) {
 
 			<StatsBar stats={analysis.stats} />
 
-			<div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_30rem]">
+			<div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_30rem]">
 				<Card
 					action={
 						<SegmentedControl
@@ -158,14 +158,13 @@ function Screen({ analysis }: { analysis: Analysis }) {
 							value={colorMode}
 						/>
 					}
-					description="Стрелка — направление перевода. Размер узла — приоритет проверки."
 					title="Сеть переводов"
 				>
 					<div className="flex flex-col gap-2">
-						<form className="flex flex-wrap items-center gap-2" onSubmit={submit} role="search">
+						<form className="flex items-center gap-2" onSubmit={submit} role="search">
 							<Input
 								aria-label="gid узла"
-								className="w-full max-w-xs"
+								className="max-w-xs min-w-0 flex-1"
 								inputMode="numeric"
 								maxLength={40}
 								onChange={(event) => setDraft(event.target.value)}
@@ -182,7 +181,9 @@ function Screen({ analysis }: { analysis: Analysis }) {
 						{message !== null && <Callout tone="warning">{message}</Callout>}
 					</div>
 
-					<div className="border-border bg-canvas relative h-[36rem] overflow-hidden rounded-md border">
+					{/* Sized to the viewport so the whole canvas fits a 1366×768 laptop under the header and
+					    the page chrome; the minimum keeps it usable on anything shorter. */}
+					<div className="border-border bg-graph-bg relative h-[calc(100dvh-22rem)] min-h-[26rem] overflow-hidden rounded-md border">
 						<CanvasErrorBoundary>
 							<GraphCanvas
 								analysis={analysis}
@@ -193,6 +194,11 @@ function Screen({ analysis }: { analysis: Analysis }) {
 							/>
 						</CanvasErrorBoundary>
 					</div>
+
+					<p className="text-fg-subtle -mt-2 text-xs">
+						Стрелка — направление перевода. Размер узла — приоритет проверки. Наведите на узел, чтобы увидеть
+						полный gid.
+					</p>
 
 					<Legend clusters={analysis.clusters} colorMode={colorMode} nodes={analysis.nodes} />
 				</Card>
