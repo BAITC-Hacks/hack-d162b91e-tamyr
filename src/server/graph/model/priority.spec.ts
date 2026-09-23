@@ -92,5 +92,6 @@ describe('rankTop', () => {
 		expect(clauses).toHaveLength(3);
 		expect(ranked!.why).toMatch(/[А-Яа-яЁё]/u);
 		expect(ranked!.why).toMatch(/\d/u);
+		expect(ranked!.why).not.toMatch(/betweenness|depth/u);
 	});
 });

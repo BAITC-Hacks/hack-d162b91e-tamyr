@@ -131,7 +131,7 @@ function dominantFactors(node: NodeRow, terms: PriorityTerms): Factor[] {
 			contribution: WEIGHTS.seeds * terms.seeds,
 		},
 		{
-			clause: `betweenness: ${numeric(node.betweenness, 3)}`,
+			clause: `посредничество: ${numeric(node.betweenness, 3)}`,
 			contribution: WEIGHTS.betweenness * terms.betweenness,
 		},
 		{
@@ -148,7 +148,7 @@ function dominantFactors(node: NodeRow, terms: PriorityTerms): Factor[] {
 function explain(node: NodeRow, terms: PriorityTerms): string {
 	const penalties: string[] = [];
 	if (node.isSeed) penalties.push('известный seed: штраф 25%');
-	if (node.truncated) penalties.push('граница depth 4: штраф 15%');
+	if (node.truncated) penalties.push('граница 4-го колена: штраф 15%');
 	const facts = dominantFactors(node, terms)
 		.slice(0, 3 - penalties.length)
 		.map((factor) => factor.clause);
