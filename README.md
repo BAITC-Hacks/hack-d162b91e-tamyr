@@ -47,6 +47,20 @@ pnpm dev                      # http://localhost:3000
 - База данных и Docker **не нужны**. `.env.example` уже содержит `LLM_PROVIDER=mock` — ассистент
   работает без ключа и без сети.
 
+### Продакшен-запуск и деплой
+
+На любой машине или сервере с Node.js ≥ 22:
+
+```bash
+pnpm install --frozen-lockfile
+cp .env.example .env          # для живой модели: LLM_PROVIDER=responses и LLM_API_KEY
+pnpm build                    # сам запускает пайплайн, затем собирает Next.js
+pnpm start                    # http://localhost:3000; порт меняется переменной PORT
+```
+
+Приложение — один Node-процесс, без базы и внешних сервисов. Переменные из таблицы ниже задаются в
+`.env` или в окружении хостинга.
+
 ### Переменные окружения
 
 | Переменная     | Значение для проверки | Для живой модели       |
@@ -66,7 +80,7 @@ pnpm dev                      # http://localhost:3000
    `output/top_nodes.csv` — **не менее 20**, в `output/clusters.csv` — строка на кластер с гипотезой.
    Например: `node -e "console.log(require('fs').readFileSync('output/nodes_roles.csv','utf8').trim().split('\n').length - 1)"`
    печатает `2248`.
-3. `pnpm dev` и открыть <http://localhost:3000> (светлая и тёмная темы — переключатель вверху справа): сеть
+3. `pnpm dev` и открыть <http://localhost:3000> (по умолчанию тёмная тема, переключатель вверху справа): сеть
    раскрашена по ролям, стрелки показывают направление денег, размер — приоритет. Периферия (80%
    узлов) скрыта по умолчанию — чип «Периферийный» включает её; справа вкладка «Топ».
 4. Ввести любой gid из `nodes_roles.csv` в поиск: узел фокусируется, соседи подсвечиваются,
@@ -160,7 +174,10 @@ pnpm dev                      # http://localhost:3000
 - The CSVs are UTF-8 without a BOM, which `pandas.read_csv` reads with no options and which keeps
   the first header exactly `gid`. In Excel, open them via Data → From Text/CSV → UTF-8, or the
   Cyrillic in `evidence` will be garbled.
-- `pnpm build && pnpm start` serves a production build.
+- **Deploy:** on any host with Node.js ≥ 22, run `pnpm install --frozen-lockfile`, copy
+  `.env.example` to `.env` (or set the variables in the host's environment), then `pnpm build`
+  (runs the pipeline, then builds Next.js) and `pnpm start` (port from `PORT`, default 3000). It is
+  a single Node process with no database or external services.
 
 ## Environment variables
 
