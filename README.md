@@ -45,7 +45,17 @@ AML-инструмент аналитика: по 4-хоповому графу 
 
 ## Быстрый старт
 
-Нужно: **Node.js ≥ 22** и **pnpm 10** (`corepack enable` включает pnpm, идущий с Node).
+Нужно: **Node.js ≥ 22** и **pnpm 10**. Python, база данных и Docker не нужны.
+
+Если их нет:
+
+1. **Node.js** — установщик LTS-версии с <https://nodejs.org> (Windows, macOS, Linux; npm входит в
+   комплект). Или менеджером пакетов: `winget install OpenJS.NodeJS.LTS` (Windows),
+   `brew install node` (macOS).
+2. **pnpm** — одной командой в новом окне терминала: `npm install -g pnpm@10`.
+3. Проверка: `node -v` печатает `v22…` или новее, `pnpm -v` — `10…`.
+
+Без глобальной установки pnpm можно вызывать через `npx pnpm@10` вместо `pnpm` в командах ниже.
 
 ```bash
 pnpm install
@@ -70,7 +80,7 @@ pnpm dev                      # http://localhost:3000
 
 ## Продакшен-запуск и деплой
 
-На любой машине или сервере с Node.js ≥ 22:
+На любой машине или сервере с Node.js ≥ 22 и pnpm 10 (установка — в разделе выше):
 
 ```bash
 pnpm install --frozen-lockfile
