@@ -108,7 +108,7 @@ All are synchronous and pure, with no I/O. Stub files carrying these exact signa
 | `roles.ts` | `ROLE_THRESHOLDS: Record<string, number>` · `assignRoles(raw: RawGraph, m: Map<string, NodeMetrics>): Map<string, RoleVerdict>` |
 | `clusters.ts` | `detectClusters(raw: RawGraph): Map<string, number>` · `summarizeClusters(raw: RawGraph, nodes: NodeRow[]): ClusterRow[]` |
 | `priority.ts` | `scorePriority(nodes: Omit<NodeRow, 'priorityScore'>[]): Map<string, number>` · `rankTop(nodes: NodeRow[], limit: number): TopRow[]` |
-| `queries.ts` | `nodeCard(a: Analysis, gid: string): NodeCard \| null` · `findCollectors(a: Analysis, gids: string[], maxHops: number)` · `traceFlow(a: Analysis, gid: string, direction: 'down' \| 'up', maxHops: number)` · `simulateRemoval(a: Analysis, gids: string[])` · `coverageGaps(a: Analysis)` |
+| `queries.ts` | `nodeCard(a: Analysis, gid: string): NodeCard \| null` · `findCollectors(a: Analysis, input: CollectorsInput): Collector[]` · `traceFlow(a: Analysis, input: FlowInput): Flow` · `simulateRemoval(a: Analysis, gids: string[]): RemovalImpact` · `coverageGaps(a: Analysis): CoverageGap[]`. Lint allows at most two parameters, so a third becomes an input object. |
 
 ### I/O and composition — Бекжан
 
@@ -290,4 +290,10 @@ asked; the person pushes.
 
 A change someone needs in a path they do not own. Newest last.
 
-- *(none yet)*
+- *(15:05 — Ораз, note)* The contract is frozen: `graph.schema.ts` plus the stubs in
+  `graph/model/*.ts`, the dependencies and `data/` are in. The stubs were written by the lead to
+  unblock the others sooner. **From now on they are Саян's files.**
+- *(15:05 — Бекжан → Ораз)* When `pnpm pipeline` works, tell Ораз, who then adds
+  `"predev": "pnpm pipeline"` and `"prebuild": "pnpm pipeline"` to `package.json`. They are not
+  added yet because the pipeline does not exist, and adding them now would break `pnpm dev` for
+  everyone.
