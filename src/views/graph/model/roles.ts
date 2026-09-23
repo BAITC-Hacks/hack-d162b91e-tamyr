@@ -53,9 +53,12 @@ export interface FlagMeta {
 }
 
 const FLAGS: Record<string, FlagMeta> = {
+	burst: { label: 'всплеск активности', tone: 'warning' },
 	cycle: { label: 'возвратный поток (цикл)', tone: 'warning' },
+	depth_outlier: { label: 'аномальный профиль для колена', tone: 'warning' },
 	fast_transit: { label: 'быстрый транзит', tone: 'info' },
 	mixed_signals: { label: 'смешанные признаки', tone: 'neutral' },
+	repeat_route: { label: 'повторяющийся маршрут', tone: 'warning' },
 	seed: { label: 'seed — исходный клиент', tone: 'danger' },
 	split: { label: 'дробление сумм', tone: 'warning' },
 	sync_inflow: { label: 'синхронный приход', tone: 'info' },
