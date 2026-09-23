@@ -335,6 +335,15 @@ A change someone needs in a path they do not own. Newest last.
 
   **After the fixes, send Ораз the final `ROLE_THRESHOLDS` and priority weights for the README
   (17:15).**
+- *(16:00 — Бекжан → Саян, three random gids after `1977adf`)* Two of three pass. The gap is in
+  the one role the jury is most likely to draw: **peripheral** is 1 333 of 2 248 nodes, so random
+  gids land there, and its evidence says only what the node has, not which rule it missed.
+  `…8767925100`: «входящих 1, исходящих 0; поток 17144 ₸». The honest one-minute answer is "not
+  terminal because 1 payer < 2 and 17 144 ₸ < 30 000 ₸", and the card should say so, for example
+  «ниже порога терминала: 1 плательщик (нужно ≥ 2), 17 144 ₸ (нужно ≥ 30 000)». Isolated seeds
+  read «входящих 0, исходящих 0; поток 0 ₸»: say «seed без переводов в выборке». The other two:
+  `…4235471100` (truncated, peripheral) reads well; `…1282143100` (consolidator, «5 плательщиков
+  (10 seed)», role_score 1.00) is blockers 1 and 2 above.
 - *(14:22 — Саян → Ораз: freeze the product domain/schema and repo signatures in this plan; provide
   `edges.parquet`, `nodes.parquet`, `transactions.parquet`, and the dataset README. The analytics
   specification is ready in `src/server/aml/data/ANALYTICS.md`; implementation and calibrated
