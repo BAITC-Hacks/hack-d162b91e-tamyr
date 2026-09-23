@@ -308,6 +308,14 @@ A change someone needs in a path they do not own. Newest last.
 - *(15:35 — Ораз, done)* `predev`/`prebuild` added; `/` renders `getAnalysis(createCtx())` with an
   error state for a broken file. Checked on the real data in headless Edge: 2 248 nodes drawn in
   1.4 s, gid search opens the card, no console errors.
+- *(16:55 — Ораз, README gate)* **Clean clone verified** at `7938a9f`, following the README
+  literally with `.env` copied from `.env.example` (mock):
+  - `pnpm install --frozen-lockfile`: 26 s
+  - `pnpm pipeline`: 7 s, 2 248 rows plus the header
+  - `pnpm check`: green
+  - `pnpm build`: 48 s. `/` is prerendered, and `prebuild` runs the pipeline first.
+
+  The README is frozen from here, except for facts that change.
 - *(16:05 — Ораз → Бекжан, review of `c1ea0c8`)* Good. The gate is green, the 7 tools match the
   contract, refusals come back instead of throws, gids are strings, results are ≤ 14 KB, and both
   mock and live answer through real tool calls. Fix these for the demo:
