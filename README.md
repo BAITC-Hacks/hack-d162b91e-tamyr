@@ -269,19 +269,20 @@ within 1e-14.
 ### Roles
 
 Every role is a formal rule. The rules are applied **in this order, and the first match wins**.
-`role_score` is how far the node clears its threshold, clipped to 0–1.
+`role_score` is how far past its threshold the node is: for a value `v` and a threshold `t`,
+`(v − t) / (v + t)`, so a node exactly on the line scores 0 and one far past it approaches 1.
 
-<!-- THRESHOLDS: synced from ROLE_THRESHOLDS in src/server/graph/model/roles.ts at 17:15 -->
+<!-- THRESHOLDS: synced from ROLE_THRESHOLDS in src/server/graph/model/roles.ts at 16:50 -->
 
-| # | Role / case      | Rule                                                                                                          | Thresholds                                                        |
-| - | ---------------- | ------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| 1 | truncated (flag) | Depth 4 and `out_deg` = 0. Never `terminal`: `consolidator` if its inputs alone meet rule 4, else `peripheral` | depth = 4; `role_score` ≤ 0.5                                     |
-| 2 | `coordinator`    | Seed or depth ≤ 1, and its money reaches ≥ 2 consolidators or distributors within 2 hops, or it is top by both `hub` and `betweenness` | depth ≤ 1; ≥ 2 targets; ≤ 2 hops                                  |
-| 3 | `distributor`    | Fan-out: many receivers, few senders                                                                          | `out_deg` ≥ 10 and `out_deg` ≥ 3 × `in_deg`                       |
-| 4 | `consolidator`   | Collects from many and forwards little                                                                        | `in_deg` ≥ 5, or `in_deg` ≥ 3 with `seeds_upstream` ≥ 2; and `pass_through` < 0.5 or `out_deg` ≤ 2 |
-| 5 | `transit`        | Money in and money out in about equal measure, small degrees; fast forwarding raises the score. Never on `pass_through` for a seed | 0.8 ≤ `pass_through` ≤ 1.2; out within 2 days of in              |
-| 6 | `terminal`       | Money stops here, and not because the traversal stopped                                                       | `out_deg` = 0, depth < 4, `in_kzt` or `in_deg` above threshold    |
-| 7 | `peripheral`     | Everything else                                                                                               | —                                                                 |
+| # | Role / case      | Rule                                                                                                   | Thresholds (`ROLE_THRESHOLDS`)                                                   | Nodes |
+| - | ---------------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- | ----- |
+| 1 | truncated (flag) | Depth 4 and `out_deg` = 0: the traversal stopped, not the money. Never `terminal`; `consolidator` only if its inputs meet rule 4, else `peripheral` | depth ≥ 4; `role_score` ≤ 0.5                                                    | 444 flagged |
+| 2 | `coordinator`    | Early in the chain and branching into the collection/distribution layer: a seed or depth ≤ 1 node that sends to several recipients, through which many consolidators/distributors are reached within 2 hops along several separate branches | depth ≤ 1; `out_deg` ≥ 3; ≥ 15 such nodes within 2 hops; ≥ 3 direct branches      | 16    |
+| 3 | `distributor`    | Fan-out: many receivers, few senders                                                                   | `out_deg` ≥ 10 and `out_deg` ≥ 2.5 × `in_deg`                                    | 53    |
+| 4 | `consolidator`   | Collects from many and forwards little                                                                 | (`in_deg` ≥ 5, or `in_deg` ≥ 3 with ≥ 2 seeds upstream) and `pass_through` < 0.5 | 94    |
+| 5 | `transit`        | Money in ≈ money out, small degrees; forwarding within 2 days raises the score. Never for a seed (its inflow is under-reported) | 0.8 ≤ `pass_through` ≤ 1.2; `in_deg`, `out_deg` ≤ 8; flag `fast_transit` at ≥ 50% forwarded within 2 days | 68    |
+| 6 | `terminal`       | Money arrives and stays, and not because the traversal stopped                                         | `out_deg` = 0, depth < 4, and (`in_deg` ≥ 2 or `in_kzt` ≥ 200 000 ₸)              | 219   |
+| 7 | `peripheral`     | Everything else; the evidence says which threshold it missed                                           | —                                                                                | 1 798 |
 
 <!-- /THRESHOLDS -->
 
@@ -290,24 +291,36 @@ table and that file ever disagree, the file is what was applied.
 
 For scale, on this data: 51 nodes have `in_deg` ≥ 5; 64 have `out_deg` ≥ 10; 70 non-seed nodes have
 `pass_through` between 0.8 and 1.2; 444 nodes are truncated; 1 091 have no outgoing transfers at
-depth < 4.
+depth < 4, of which 219 clear the terminal threshold. The role counts of every run are in
+`output/run_summary.json`.
 
 ### Clusters
 
 Louvain community detection (`graphology-communities-louvain`) on the **undirected** projection,
-weighted by `sum_kzt`. Direction is dropped **only for clustering** — every metric and role above
-uses the directed graph. The random generator is seeded, so the same data gives the same clusters on
-every run. Each cluster gets a Russian hypothesis generated from its role mix and seed count. On this
-data Louvain finds about 45 communities, 8 of them holding more than one seed.
+run separately in each weakly connected component, with reciprocal edges merged and weighted by
+`log1p(sum_kzt) + 0.25 · log1p(n_tx)`. Direction is dropped **only for clustering** — every metric
+and role above uses the directed graph. The random generator is seeded (42), and cluster ids are
+ordered by internal KZT, so the same data gives the same clusters on every run. Each cluster gets a
+Russian hypothesis generated from its role mix and seed count. On this data: **84 clusters**
+(isolated seeds are clusters of one).
 
 ### Priority
 
-`priority_score` is a documented weighted sum of normalised terms: the role's weight, the log of the
-flow volume, `seeds_upstream`, `betweenness`, `pagerank` and the seed density of the node's cluster,
-with a penalty when the node is `truncated`. It is scaled to 0–1. `why` names the two or three terms
-that contributed most, with their values.
+`priority_score` answers "what to inspect next", not "who is guilty". It is a weighted sum of terms
+each normalised to 0–1 (`src/server/graph/model/priority.ts`):
 
-<!-- PRIORITY WEIGHTS: add the exact weights from src/server/graph/model/priority.ts at 17:15 -->
+| Term | Weight | Normalisation |
+| --- | --- | --- |
+| Role strength | 0.25 | role weight × `role_score` (coordinator 1.0, consolidator 0.95, distributor 0.9, transit 0.8, terminal 0.55, peripheral 0) |
+| Flow volume | 0.20 | `log1p(in_kzt + out_kzt)` ÷ the maximum |
+| Seed reach | 0.15 | `seeds_upstream` ÷ the maximum |
+| Betweenness | 0.15 | ÷ the maximum |
+| PageRank | 0.15 | ÷ the maximum |
+| Cluster seed density | 0.10 | seeds ÷ nodes in the node's cluster |
+
+Then **× 0.75 for a seed** (already known to the analyst) and **× 0.85 for a truncated node**
+(outward behaviour unobserved). `why` names the two or three terms that contributed most, with their
+values, plus any penalty. No seed reaches the top 50.
 
 ### How the data traps are handled
 
