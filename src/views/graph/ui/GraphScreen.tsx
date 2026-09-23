@@ -16,6 +16,7 @@ import { type ColorMode, type Focus } from '../model/focus';
 import { formatInteger, HIGH_PRIORITY_CUT } from '../model/format';
 import { buildIndex, counterparties, type GidLookup, lookupGid } from '../model/graphIndex';
 import { countRoles } from '../model/roles';
+import { useMoneyPath } from '../model/useMoneyPath';
 import { CanvasErrorBoundary } from './CanvasErrorBoundary';
 import { CanvasSkeleton } from './GraphSkeleton';
 import { Legend } from './Legend';
@@ -138,14 +139,22 @@ function Screen({ analysis }: { analysis: Analysis }) {
 	const [draft, setDraft] = useState('');
 	const [message, setMessage] = useState<string | null>(null);
 	const [prefill, setPrefill] = useState<AssistantPrefill | undefined>(undefined);
+	const moneyPath = useMoneyPath(analysis);
+	const { stop: stopPath } = moneyPath;
+	const pathTarget = moneyPath.path?.target ?? null;
 
 	/** Flies the camera and highlights the neighbours; does not change the open tab. */
-	const focusNode = useCallback((gid: string) => {
-		setFocus((previous) => ({ gid, seq: (previous?.seq ?? 0) + 1 }));
-		setHighlightCluster(null);
-		setMessage(null);
-		setDraft(gid);
-	}, []);
+	const focusNode = useCallback(
+		(gid: string) => {
+			// A money path belongs to one node; moving to another would leave it drawn under the wrong card.
+			if (pathTarget !== null && pathTarget !== gid) stopPath();
+			setFocus((previous) => ({ gid, seq: (previous?.seq ?? 0) + 1 }));
+			setHighlightCluster(null);
+			setMessage(null);
+			setDraft(gid);
+		},
+		[pathTarget, stopPath],
+	);
 
 	const selectNode = useCallback(
 		(gid: string) => {
@@ -179,6 +188,7 @@ function Screen({ analysis }: { analysis: Analysis }) {
 	};
 
 	const clear = () => {
+		stopPath();
 		setFocus(null);
 		setHighlightCluster(null);
 		setMessage(null);
@@ -271,10 +281,10 @@ function Screen({ analysis }: { analysis: Analysis }) {
 								analysis={analysis}
 								colorMode={colorMode}
 								focus={focus}
+								hiddenRoles={hiddenRoles}
 								highlightCluster={highlightCluster}
 								onSelectNode={selectNode}
-								// TODO(integrate): hiddenRoles={hiddenRoles}
-								// TODO(integrate): path={moneyPath}
+								path={moneyPath.view}
 							/>
 						</CanvasErrorBoundary>
 					</div>
@@ -305,6 +315,7 @@ function Screen({ analysis }: { analysis: Analysis }) {
 					<Tabs.Content className={TAB_CONTENT} value="node">
 						{focusedNode !== undefined && card !== null ? (
 							<NodeCard
+								moneyPath={moneyPath}
 								node={focusedNode}
 								onAsk={askAbout}
 								onSelect={selectNode}

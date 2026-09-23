@@ -6,6 +6,8 @@ import clsx from 'clsx';
 import { type ReactNode } from 'react';
 import { formatInteger, formatKzt, formatScore, formatShare, PRIORITY_TEXT_CLASS, priorityTone } from '../model/format';
 import { flagMeta } from '../model/roles';
+import { type MoneyPathController } from '../model/useMoneyPath';
+import { MoneyPathControl } from './MoneyPathControl';
 import { GidButton, RoleTag } from './RoleTag';
 
 /**
@@ -16,6 +18,8 @@ import { GidButton, RoleTag } from './RoleTag';
  * the evidence sits at the top and the numbers it cites sit right under it.
  */
 export interface NodeCardProps {
+	/** Drives «Показать путь денег»; absent, the card has no path control. */
+	moneyPath?: MoneyPathController;
 	node: NodeRow;
 	/** Puts a question about this node into the assistant's draft. */
 	onAsk?: (gid: string) => void;
@@ -81,7 +85,7 @@ function CounterpartyList(props: {
 	);
 }
 
-export function NodeCard({ node, onAsk, onSelect, topIn, topOut }: NodeCardProps) {
+export function NodeCard({ moneyPath, node, onAsk, onSelect, topIn, topOut }: NodeCardProps) {
 	return (
 		<article aria-label={`Узел ${node.gid}`} className="flex flex-col gap-4">
 			<header className="flex flex-col gap-2">
@@ -131,8 +135,9 @@ export function NodeCard({ node, onAsk, onSelect, topIn, topOut }: NodeCardProps
 						Спросить ассистента
 					</Button>
 				)}
-				{/* TODO(integrate): <MoneyPathControl …/> — «Показать путь денег» goes here, beside the assistant. */}
 			</div>
+
+			{moneyPath !== undefined && <MoneyPathControl controller={moneyPath} gid={node.gid} />}
 
 			<dl className="grid grid-cols-2 gap-1.5">
 				<Metric label="Кластер" value={node.clusterId} />
