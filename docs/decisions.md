@@ -102,3 +102,6 @@ turns: «кого первым» → `get_top_nodes(10)` + five `get_node` (21 s
 топ-5» → `get_top_nodes(5)` + `simulate_removal` (9 s; 35 → 122 components, largest 1 877 → 1 733).
 No tool errors, every number traceable to a result, phrased as hypotheses. The first turn is the slow
 one (six calls): acceptable live, and the mock stays the default for reviewers.
+
+**16:45 — Layout: ForceAtlas2 with dissuaded hubs and strong gravity, 500 iterations (Ораз, in Бекжан's `layout.ts` with his agreement).**
+Five settings were rendered side by side on the real data. The inferred defaults gave one dense ball; LinLog an even disc. `outboundAttractionDistribution` + `scalingRatio 10` + `strongGravityMode` (gravity 0.05) shows distributors as fans and consolidator groups apart, which is what the analyst needs to see at a glance. ~6 s pipeline. Chosen over: the defaults (no structure) and LinLog (no structure, slower).

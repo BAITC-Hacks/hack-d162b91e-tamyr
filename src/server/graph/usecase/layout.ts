@@ -25,7 +25,7 @@ export interface Position {
  * More iterations converge tighter and cost linearly. With Barnes–Hut on (which `inferSettings`
  * turns on above 2 000 nodes) 300 iterations settle 2 248 nodes in about a second.
  */
-const ITERATIONS = 300;
+const ITERATIONS = 500;
 
 const round = (value: number): number => Math.round(value * 100) / 100;
 
@@ -52,7 +52,17 @@ export function computeLayout(raw: RawGraph): Map<string, Position> {
 	forceAtlas2.assign(graph, {
 		getEdgeWeight: 'weight',
 		iterations: ITERATIONS,
-		settings: forceAtlas2.inferSettings(graph),
+		settings: {
+			...forceAtlas2.inferSettings(graph),
+			// Hub-and-spoke instead of one ball: dissuading hubs spreads a distributor's receivers out
+			// around it as a fan, a large scaling ratio gives communities room, and strong gravity keeps
+			// the small islands on screen instead of flung to the corners. Chosen at 16:45 by rendering
+			// five settings on the real data side by side; LinLog made an even disc with no structure.
+			gravity: 0.05,
+			outboundAttractionDistribution: true,
+			scalingRatio: 10,
+			strongGravityMode: true,
+		},
 	});
 
 	const positions = new Map<string, Position>();
