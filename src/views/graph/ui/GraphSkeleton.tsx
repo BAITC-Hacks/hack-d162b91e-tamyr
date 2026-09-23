@@ -23,25 +23,33 @@ export function GraphScreenSkeleton() {
 				<div className={`${BLOCK} h-7 w-48`} />
 				<div className={`${BLOCK} h-4 w-96 max-w-full`} />
 			</div>
-			<div className="border-border bg-surface grid grid-cols-2 gap-3 rounded-lg border px-5 py-3 sm:grid-cols-3 lg:grid-cols-5">
-				{['nodes', 'edges', 'seeds', 'kzt', 'period'].map((key) => (
-					<div className="flex flex-col gap-1.5" key={key}>
-						<div className={`${BLOCK} h-3 w-16`} />
-						<div className={`${BLOCK} h-6 w-24`} />
+			<div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+				{['nodes', 'tx', 'kzt', 'clusters', 'priority', 'seeds'].map((key) => (
+					<div
+						className="border-border bg-surface flex items-center gap-3 rounded-lg border px-3 py-2.5"
+						key={key}
+					>
+						<div className={`${BLOCK} size-8`} />
+						<div className="flex flex-col gap-1">
+							<div className={`${BLOCK} h-3 w-16`} />
+							<div className={`${BLOCK} h-5 w-20`} />
+						</div>
 					</div>
 				))}
 			</div>
-			<div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_30rem]">
-				<div className="border-border bg-surface flex flex-col gap-3 rounded-lg border p-4">
-					<div className={`${BLOCK} h-9 w-full max-w-xl`} />
-					<div className={`${BLOCK} h-[36rem] w-full`} />
-					<div className={`${BLOCK} h-4 w-2/3`} />
-				</div>
-				<div className="border-border bg-surface flex flex-col gap-3 rounded-lg border p-4">
-					<div className={`${BLOCK} h-9 w-full`} />
+			<div className="grid gap-3 xl:h-[calc(100dvh-14.25rem)] xl:grid-cols-[17rem_minmax(0,1fr)_21rem] 2xl:grid-cols-[20rem_minmax(0,1fr)_26rem]">
+				<div className="border-border bg-surface flex flex-col gap-2 rounded-lg border p-3.5 max-xl:order-2">
 					{[1, 2, 3, 4, 5, 6].map((key) => (
 						<div className={`${BLOCK} h-10 w-full`} key={key} />
 					))}
+				</div>
+				<div className="border-border bg-surface flex flex-col gap-3 rounded-lg border p-3.5 max-xl:order-1">
+					<div className={`${BLOCK} h-9 w-full max-w-xl`} />
+					<div className={`${BLOCK} h-[60dvh] w-full xl:h-auto xl:flex-1`} />
+				</div>
+				<div className="border-border bg-surface flex flex-col gap-3 rounded-lg border p-3.5 max-xl:order-3">
+					<div className={`${BLOCK} h-9 w-full`} />
+					<div className={`${BLOCK} h-40 w-full`} />
 				</div>
 			</div>
 			<span className="sr-only">Загружаем анализ…</span>

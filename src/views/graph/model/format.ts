@@ -57,3 +57,34 @@ export function formatPeriod(from: string, to: string): string {
 
 	return `${formatDate(from).slice(0, 5)}–${formatDate(to)}`;
 }
+
+/**
+ * The cut the header's «Высокий приоритет» counts from. A fixed number rather than a percentile,
+ * so the count means something: on the case data about one node in twenty-three clears it.
+ */
+export const HIGH_PRIORITY_CUT = 0.4;
+
+/** Above this a priority is shown in the danger tone; between it and the cut, in the warning tone. */
+export const TOP_PRIORITY_CUT = 0.5;
+
+export type PriorityTone = 'high' | 'low' | 'top';
+
+export function priorityTone(score: number): PriorityTone {
+	if (score >= TOP_PRIORITY_CUT) return 'top';
+	if (score >= HIGH_PRIORITY_CUT) return 'high';
+
+	return 'low';
+}
+
+/** Literal classes, so Tailwind emits them. The number is always printed beside the colour. */
+export const PRIORITY_TEXT_CLASS: Record<PriorityTone, string> = {
+	high: 'text-warning',
+	low: 'text-fg-muted',
+	top: 'text-danger',
+};
+
+export const PRIORITY_BAR_CLASS: Record<PriorityTone, string> = {
+	high: 'bg-warning',
+	low: 'bg-fg-subtle',
+	top: 'bg-danger',
+};

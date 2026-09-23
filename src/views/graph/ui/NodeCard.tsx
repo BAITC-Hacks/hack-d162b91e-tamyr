@@ -1,8 +1,10 @@
 import { type Counterparty, type NodeRow } from '@server/graph/model/graph.schema';
 import { Badge } from '@shared/ui/Badge';
 import { Button } from '@shared/ui/Button';
+import { Callout } from '@shared/ui/Callout';
+import clsx from 'clsx';
 import { type ReactNode } from 'react';
-import { formatInteger, formatKzt, formatScore, formatShare } from '../model/format';
+import { formatInteger, formatKzt, formatScore, formatShare, PRIORITY_TEXT_CLASS, priorityTone } from '../model/format';
 import { flagMeta } from '../model/roles';
 import { GidButton, RoleTag } from './RoleTag';
 
@@ -22,12 +24,28 @@ export interface NodeCardProps {
 	topOut: readonly Counterparty[];
 }
 
-function Metric({ label, value }: { label: string; value: ReactNode }) {
+function Metric({ hint, label, value }: { hint?: string; label: string; value: ReactNode }) {
 	return (
-		<div className="flex items-baseline justify-between gap-3 py-1">
-			<dt className="text-fg-muted text-xs">{label}</dt>
-			<dd className="text-fg tabular text-sm">{value}</dd>
+		<div className="bg-surface-sunken flex min-w-0 flex-col gap-0.5 rounded-md px-2.5 py-1.5" title={hint}>
+			<dt className="text-fg-muted truncate text-[11px]">{label}</dt>
+			<dd className="text-fg tabular truncate text-sm font-medium">{value}</dd>
 		</div>
+	);
+}
+
+/** role_score as a small meter: the word says the role, the bar says how strongly the rule fired. */
+function RoleMeter({ score }: { score: number }) {
+	return (
+		<span
+			className="text-fg-muted inline-flex items-center gap-2 text-xs"
+			title="Сила срабатывания правила роли, 0–1"
+		>
+			сила правила
+			<span aria-hidden className="bg-surface-sunken h-1.5 w-16 overflow-hidden rounded-full">
+				<span className="bg-accent block h-full rounded-full" style={{ width: `${Math.round(score * 100)}%` }} />
+			</span>
+			<span className="text-fg tabular">{formatScore(score)}</span>
+		</span>
 	);
 }
 
@@ -47,11 +65,13 @@ function CounterpartyList(props: {
 			) : (
 				<ul className="flex flex-col">
 					{rows.map((row) => (
-						<li className="border-border flex items-center gap-2 border-b py-1.5 last:border-0" key={row.gid}>
+						<li className="border-border flex flex-col gap-0.5 border-b py-1.5 last:border-0" key={row.gid}>
 							<GidButton gid={row.gid} onSelect={onSelect} />
-							<RoleTag className="text-fg-muted text-xs" role={row.role} />
-							<span className="text-fg tabular ml-auto text-xs whitespace-nowrap">
-								{formatKzt(row.sumKzt)} · {row.nTx} тр.
+							<span className="flex items-center gap-2">
+								<RoleTag className="text-fg-muted text-[11px]" role={row.role} />
+								<span className="text-fg tabular ml-auto text-xs whitespace-nowrap">
+									{formatKzt(row.sumKzt)} · {formatInteger(row.nTx)} тр.
+								</span>
 							</span>
 						</li>
 					))}
@@ -65,10 +85,25 @@ export function NodeCard({ node, onAsk, onSelect, topIn, topOut }: NodeCardProps
 	return (
 		<article aria-label={`Узел ${node.gid}`} className="flex flex-col gap-4">
 			<header className="flex flex-col gap-2">
-				<p className="text-fg tabular font-mono text-sm font-medium break-all">{node.gid}</p>
-				<div className="flex flex-wrap items-center gap-2">
-					<RoleTag className="text-fg text-md font-semibold" role={node.role} />
-					<span className="text-fg-muted text-xs">уверенность {formatScore(node.roleScore)}</span>
+				<div className="flex items-start justify-between gap-3">
+					<p className="text-fg tabular font-mono text-sm font-medium break-all">{node.gid}</p>
+					<span
+						className={clsx(
+							'tabular shrink-0 text-lg leading-none font-semibold',
+							PRIORITY_TEXT_CLASS[priorityTone(node.priorityScore)],
+						)}
+						title="Приоритет проверки, 0–1: очерёдность, а не вывод о виновности"
+					>
+						<span className="sr-only">Приоритет </span>
+						{formatScore(node.priorityScore)}
+					</span>
+				</div>
+				<div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+					<RoleTag
+						className="border-border-strong text-fg rounded-full border px-2.5 py-0.5 text-sm font-semibold"
+						role={node.role}
+					/>
+					<RoleMeter score={node.roleScore} />
 				</div>
 				{node.flags.length > 0 && (
 					<ul aria-label="Флаги" className="flex flex-wrap gap-1.5">
@@ -85,25 +120,39 @@ export function NodeCard({ node, onAsk, onSelect, topIn, topOut }: NodeCardProps
 				)}
 			</header>
 
-			<p className="bg-surface-sunken text-fg rounded-md px-3 py-2.5 text-sm">{node.evidence}</p>
+			<Callout tone="info">
+				<p className="font-medium">Почему такая роль (гипотеза)</p>
+				<p>{node.evidence}</p>
+			</Callout>
 
-			{onAsk !== undefined && (
-				<Button className="self-start" onClick={() => onAsk(node.gid)} variant="secondary">
-					Спросить ассистента
-				</Button>
-			)}
+			<div className="flex flex-wrap items-center gap-2">
+				{onAsk !== undefined && (
+					<Button onClick={() => onAsk(node.gid)} variant="secondary">
+						Спросить ассистента
+					</Button>
+				)}
+				{/* TODO(integrate): <MoneyPathControl …/> — «Показать путь денег» goes here, beside the assistant. */}
+			</div>
 
-			<dl className="divide-border grid grid-cols-1 gap-x-6 sm:grid-cols-2">
-				<Metric label="Приоритет" value={formatScore(node.priorityScore)} />
+			<dl className="grid grid-cols-2 gap-1.5">
 				<Metric label="Кластер" value={node.clusterId} />
+				<Metric hint="Минимальное колено обхода от seed; 0 — сам seed" label="Колено обхода" value={node.depth} />
 				<Metric label="Входящих связей" value={formatInteger(node.inDeg)} />
 				<Metric label="Исходящих связей" value={formatInteger(node.outDeg)} />
 				<Metric label="Получено" value={formatKzt(node.inKzt)} />
 				<Metric label="Отправлено" value={formatKzt(node.outKzt)} />
-				<Metric label="Пропуск (out/in)" value={node.passThrough === null ? '—' : formatShare(node.passThrough)} />
-				<Metric label="Колено обхода" value={node.depth} />
+				<Metric
+					hint="Отправлено / получено"
+					label="Пропуск (out/in)"
+					value={node.passThrough === null ? '—' : formatShare(node.passThrough)}
+				/>
 				<Metric label="Seed выше по потоку" value={formatInteger(node.seedsUpstream)} />
 				<Metric label="Seed" value={node.isSeed ? 'да' : 'нет'} />
+				<Metric
+					hint="Доля исходящих ₸, ушедших в течение 2 дней после входящего перевода"
+					label="Быстрый транзит"
+					value={formatShare(node.fastTransitShare)}
+				/>
 			</dl>
 
 			<CounterpartyList

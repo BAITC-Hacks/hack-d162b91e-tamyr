@@ -69,3 +69,17 @@ export const CLUSTER_PALETTE_SIZE = 8;
 export function clusterSlot(clusterId: number): number {
 	return (clusterId % CLUSTER_PALETTE_SIZE) + 1;
 }
+
+/** The role colour as a CSS value, for SVG strokes that a utility class cannot reach. */
+export function roleColor(role: Role): string {
+	return `var(--color-role-${role})`;
+}
+
+/** How many nodes carry each role, in legend order. */
+export function countRoles(nodes: readonly { role: Role }[]): Map<Role, number> {
+	const counts = new Map<Role, number>(ROLE_ORDER.map((role) => [role, 0]));
+
+	for (const node of nodes) counts.set(node.role, (counts.get(node.role) ?? 0) + 1);
+
+	return counts;
+}
