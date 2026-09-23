@@ -14,6 +14,8 @@ export interface GraphNodeAttributes {
 	[key: string]: unknown;
 	clusterId: number;
 	label: string;
+	/** Place on the priority list, 0 first. The top of it glows on the canvas. */
+	rank: number;
 	role: Role;
 	size: number;
 	x: number;
@@ -25,7 +27,7 @@ export interface GraphEdgeAttributes {
 	size: number;
 	/** The transfer amount, so a focused node labels its largest counterparties first. */
 	sumKzt: number;
-	type: 'arrow';
+	type: 'curvedArrow';
 }
 
 export type MoneyGraph = DirectedGraph<GraphNodeAttributes, GraphEdgeAttributes>;
@@ -73,11 +75,15 @@ export function buildGraph(analysis: Pick<Analysis, 'edges' | 'nodes'>): MoneyGr
 	// whoever is first on the list, not to a score nobody reached.
 	const topScore = Math.max(0, ...analysis.nodes.map((node) => node.priorityScore));
 	const relative = (score: number) => (topScore > 0 ? score / topScore : 0);
+	const ranks = new Map(
+		[...analysis.nodes].sort((a, b) => b.priorityScore - a.priorityScore).map((node, rank) => [node.gid, rank]),
+	);
 
 	for (const node of analysis.nodes) {
 		graph.mergeNode(node.gid, {
 			clusterId: node.clusterId,
 			label: shortGid(node.gid),
+			rank: ranks.get(node.gid) ?? analysis.nodes.length,
 			role: node.role,
 			size: nodeSize(relative(node.priorityScore)),
 			x: node.x,
@@ -91,7 +97,7 @@ export function buildGraph(analysis: Pick<Analysis, 'edges' | 'nodes'>): MoneyGr
 		// An edge to a node that is not in the list would make graphology invent a node with no
 		// position, and sigma refuses to render one. Skip it rather than lose the whole picture.
 		if (graph.hasNode(edge.src) && graph.hasNode(edge.dst)) {
-			graph.mergeEdge(edge.src, edge.dst, { size: sizeOf(edge.sumKzt), sumKzt: edge.sumKzt, type: 'arrow' });
+			graph.mergeEdge(edge.src, edge.dst, { size: sizeOf(edge.sumKzt), sumKzt: edge.sumKzt, type: 'curvedArrow' });
 		}
 	}
 

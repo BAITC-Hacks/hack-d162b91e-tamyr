@@ -1,10 +1,12 @@
 'use client';
 
 import { SigmaContainer, useRegisterEvents, useSetSettings, useSigma } from '@react-sigma/core';
-import { type Analysis } from '@server/graph/model/graph.schema';
+import { type Analysis, type Role } from '@server/graph/model/graph.schema';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { type Settings } from 'sigma/settings';
 import { buildGraph, type GraphEdgeAttributes, type GraphNodeAttributes, type MoneyGraph } from '../model/buildGraph';
+import { createDrawHover, CurvedArrowProgram, GLOW_CORE, GlowNodeProgram, withAlpha } from '../model/canvasStyle';
+import { type MoneyPathView, pathEdgeKey } from '../model/canvasTypes';
 import { type ColorMode, type Focus } from '../model/focus';
 import { clusterSlot } from '../model/roles';
 import { type GraphPalette, usePalette } from '../model/usePalette';
@@ -19,20 +21,32 @@ import { type GraphPalette, usePalette } from '../model/usePalette';
  * Settings passed to `SigmaContainer` are compared deeply and a change **recreates sigma**, so they
  * are a constant here. Everything that changes — colours, focus, the highlighted cluster — goes
  * through `useSetSettings` as reducers, which repaint without rebuilding.
+ *
+ * The look is a night sky: the canvas is dark in both themes, the top of the priority list glows in
+ * its role colour, edges are curved streams in their sender's colour, and the periphery is dust.
+ * One "active set" decides what is lit — the money path if there is one, else the hovered node's
+ * neighbourhood, else the focused node's, else the highlighted cluster — and everything outside it
+ * recedes.
  */
 
 export interface GraphCanvasProps {
 	analysis: Pick<Analysis, 'edges' | 'nodes'>;
 	colorMode: ColorMode;
 	focus: Focus | null;
+	/** Nodes of these roles, and their transfers, are not drawn. */
+	hiddenRoles?: ReadonlySet<Role>;
 	highlightCluster: number | null;
 	onSelectNode: (gid: string) => void;
+	/** A money path revealed hop by hop; `null` or absent draws the network as usual. */
+	path?: MoneyPathView | null;
 }
 
 type CanvasSettings = Partial<Settings<GraphNodeAttributes, GraphEdgeAttributes>>;
+type CanvasSigma = ReturnType<typeof useSigma<GraphNodeAttributes, GraphEdgeAttributes>>;
 
 const SETTINGS: CanvasSettings = {
-	defaultEdgeType: 'arrow',
+	defaultEdgeType: 'curvedArrow',
+	edgeProgramClasses: { curvedArrow: CurvedArrowProgram },
 	// Two thousand labels are noise. The overview labels only the top of the priority list — sigma's
 	// collision grid keeps one label per cell — and zooming in brings the rest.
 	labelDensity: 0.25,
@@ -40,6 +54,8 @@ const SETTINGS: CanvasSettings = {
 	labelGridCellSize: 160,
 	labelRenderedSizeThreshold: 8,
 	labelSize: 12,
+	labelWeight: '600',
+	nodeProgramClasses: { glow: GlowNodeProgram },
 	renderEdgeLabels: false,
 	zIndex: true,
 	// Sigma's default grows nodes by √(zoom), so zooming into the dense core only makes the blob
@@ -51,6 +67,12 @@ const SETTINGS: CanvasSettings = {
 const FOCUS_LABELS = 5;
 /** A node that is not in focus shrinks to this share of its size, so it recedes rather than blots. */
 const DIM_SIZE = 0.4;
+/** The top of the priority list that glows. */
+const GLOW_TOP = 20;
+/** Peripheral nodes are most of the graph: smaller, so they read as dust around the structure. */
+const PERIPHERAL_SIZE = 0.75;
+/** Edge alpha by state: faint streams in the overview, bright in the lit neighbourhood. */
+const EDGE_ALPHA = { active: 0.85, overview: 0.22, path: 1, peripheral: 0.1 } as const;
 
 const CONTAINER_STYLE = { background: 'transparent', height: '100%', width: '100%' } as const;
 
@@ -81,7 +103,44 @@ function largestCounterparties(graph: MoneyGraph, focused: string): string[] {
 		.map(([node]) => node);
 }
 
-function Controller({ colorMode, focus, highlightCluster, onSelectNode }: Omit<GraphCanvasProps, 'analysis'>) {
+/** A node drawn with a halo in its colour; the core keeps its size, the halo is extra. */
+function glowing(data: GraphNodeAttributes, { color, core }: { color: string; core: number }) {
+	return {
+		...data,
+		color,
+		glowInner: withAlpha(color, 0.4),
+		glowOuter: withAlpha(color, 0.13),
+		size: core / GLOW_CORE,
+		type: 'glow',
+	};
+}
+
+/** Fly the camera to fit a set of nodes. */
+function fitCamera(sigma: CanvasSigma, { duration, nodes }: { duration: number; nodes: readonly string[] }) {
+	sigma.refresh();
+
+	const points = nodes.map((node) => sigma.getNodeDisplayData(node)).filter((point) => point !== undefined);
+
+	if (points.length === 0) return;
+
+	const xs = points.map((point) => point.x);
+	const ys = points.map((point) => point.y);
+	const x = (Math.min(...xs) + Math.max(...xs)) / 2;
+	const y = (Math.min(...ys) + Math.max(...ys)) / 2;
+	const spread = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+
+	// Normalised coordinates span 0–1 at ratio 1; a box of side s fits at about 1.3s with a margin.
+	void sigma.getCamera().animate({ ratio: Math.min(1, Math.max(0.12, spread * 1.3)), x, y }, { duration });
+}
+
+function Controller({
+	colorMode,
+	focus,
+	hiddenRoles,
+	highlightCluster,
+	onSelectNode,
+	path,
+}: Omit<GraphCanvasProps, 'analysis'>) {
 	const sigma = useSigma<GraphNodeAttributes, GraphEdgeAttributes>();
 	const setSettings = useSetSettings<GraphNodeAttributes, GraphEdgeAttributes>();
 	const registerEvents = useRegisterEvents<GraphNodeAttributes, GraphEdgeAttributes>();
@@ -90,6 +149,7 @@ function Controller({ colorMode, focus, highlightCluster, onSelectNode }: Omit<G
 	const onSelect = useRef(onSelectNode);
 	const [hovered, setHovered] = useState<string | null>(null);
 	const focusedGid = focus?.gid ?? null;
+	const activePath = path ?? null;
 
 	useEffect(() => {
 		onSelect.current = onSelectNode;
@@ -114,61 +174,113 @@ function Controller({ colorMode, focus, highlightCluster, onSelectNode }: Omit<G
 	useEffect(() => {
 		const graph = sigma.getGraph();
 		const focused = focusedGid !== null && graph.hasNode(focusedGid) ? focusedGid : null;
-		const neighbours = new Set(focused === null ? [] : graph.neighbors(focused));
-		const labelled = new Set(focused === null ? [] : largestCounterparties(graph, focused));
+		const hover = activePath === null && hovered !== null && graph.hasNode(hovered) ? hovered : null;
+		// Hover is a temporary focus: it lights its own neighbourhood and moves no camera.
+		const centre = hover ?? focused;
+		const neighbours = new Set(centre === null ? [] : graph.neighbors(centre));
+		const labelled = new Set(centre === null ? [] : largestCounterparties(graph, centre));
 		const inCluster = (node: string) => graph.getNodeAttribute(node, 'clusterId') === highlightCluster;
+		const isHidden = (node: string) => hiddenRoles?.has(graph.getNodeAttribute(node, 'role')) ?? false;
+		const revealed = (node: string) => {
+			const hop = activePath?.hops.get(node);
+
+			return activePath !== null && hop !== undefined && hop <= activePath.revealedHop;
+		};
+		const sourceColor = (node: string) =>
+			nodeColor(palette, { attributes: graph.getNodeAttributes(node), mode: colorMode });
 
 		setSettings({
+			defaultDrawNodeHover: createDrawHover({ background: palette.labelBackground, label: palette.label }),
 			edgeReducer: (edge, data) => {
-				if (focused !== null) {
-					const touches = graph.source(edge) === focused || graph.target(edge) === focused;
+				const source = graph.source(edge);
+				const target = graph.target(edge);
 
-					return touches ? { ...data, color: palette.edgeFocus, zIndex: 1 } : { ...data, hidden: true };
-				}
+				if (isHidden(source) || isHidden(target)) return { ...data, hidden: true };
 
-				if (highlightCluster !== null) {
-					return inCluster(graph.source(edge)) && inCluster(graph.target(edge))
-						? { ...data, color: palette.edgeFocus }
+				const color = sourceColor(source);
+
+				if (activePath !== null) {
+					const onPath = activePath.edges.has(pathEdgeKey(source, target)) && revealed(source) && revealed(target);
+
+					return onPath
+						? { ...data, color: withAlpha(color, EDGE_ALPHA.path), size: data.size * 2 + 1.5, zIndex: 2 }
 						: { ...data, hidden: true };
 				}
 
-				return { ...data, color: palette.edge };
+				if (centre !== null) {
+					return source === centre || target === centre
+						? { ...data, color: withAlpha(color, EDGE_ALPHA.active), size: data.size * 1.6 + 0.4, zIndex: 1 }
+						: { ...data, hidden: true };
+				}
+
+				if (highlightCluster !== null) {
+					return inCluster(source) && inCluster(target)
+						? { ...data, color: withAlpha(color, EDGE_ALPHA.active), zIndex: 1 }
+						: { ...data, hidden: true };
+				}
+
+				const peripheral = graph.getNodeAttribute(source, 'role') === 'peripheral';
+
+				return {
+					...data,
+					color: withAlpha(color, peripheral ? EDGE_ALPHA.peripheral : EDGE_ALPHA.overview),
+					size: data.size * 0.8,
+				};
 			},
 			labelColor: { color: palette.label },
 			nodeReducer: (node, data) => {
+				if (isHidden(node)) return { ...data, hidden: true };
+
 				const color = nodeColor(palette, { attributes: data, mode: colorMode });
 				const dimmed = { ...data, color: palette.dim, label: null, size: data.size * DIM_SIZE, zIndex: 0 };
 				// The hovered node shows its whole gid; everywhere else the canvas prints the short one.
-				const shown = node === hovered ? { ...data, color, forceLabel: true, label: node, zIndex: 3 } : null;
+				const shown = node === hovered ? { forceLabel: true, label: node, zIndex: 4 } : null;
 
-				if (focused !== null) {
+				if (activePath !== null) {
+					if (!revealed(node)) return { ...dimmed, ...shown };
+
+					const isTarget = activePath.hops.get(node) === 0;
+					const core = Math.max(data.size, isTarget ? 9 : 5.5);
+
+					return { ...glowing(data, { color, core }), forceLabel: true, zIndex: isTarget ? 3 : 2, ...shown };
+				}
+
+				if (centre !== null) {
 					// Larger rather than `highlighted`: sigma's highlight draws a white label box that is
-					// unreadable under the dark theme's light label colour.
-					if (node === focused) {
-						return {
-							...data,
-							color,
-							forceLabel: true,
-							size: Math.min(Math.max(data.size * 1.3, 9), 13),
-							zIndex: 2,
-							...shown,
-						};
+					// unreadable under the canvas's light label colour.
+					if (node === centre) {
+						const core = Math.min(Math.max(data.size * 1.2, 8), 11);
+
+						return { ...glowing(data, { color, core }), forceLabel: true, zIndex: 3, ...shown };
 					}
 					if (neighbours.has(node)) {
-						return { ...data, color, forceLabel: labelled.has(node), zIndex: 1, ...shown };
+						const lit = data.rank < GLOW_TOP ? glowing(data, { color, core: data.size }) : { ...data, color };
+
+						return { ...lit, forceLabel: labelled.has(node), zIndex: 2, ...shown };
 					}
+					// While hovering elsewhere, the focused node stays visible so the user keeps their place.
+					if (node === focused) return { ...glowing(data, { color, core: data.size }), zIndex: 1 };
 
 					return dimmed;
 				}
 
 				if (highlightCluster !== null) {
-					return data.clusterId === highlightCluster ? { ...data, color, zIndex: 1, ...shown } : dimmed;
+					if (data.clusterId !== highlightCluster) return dimmed;
+
+					const lit = data.rank < GLOW_TOP ? glowing(data, { color, core: data.size }) : { ...data, color };
+
+					return { ...lit, zIndex: 1, ...shown };
 				}
 
-				return { ...data, color, ...shown };
+				if (data.rank < GLOW_TOP) return { ...glowing(data, { color, core: data.size }), zIndex: 2, ...shown };
+				if (data.role === 'peripheral') {
+					return { ...data, color, size: data.size * PERIPHERAL_SIZE, zIndex: 0, ...shown };
+				}
+
+				return { ...data, color, zIndex: 1, ...shown };
 			},
 		});
-	}, [colorMode, focusedGid, highlightCluster, hovered, palette, setSettings, sigma]);
+	}, [activePath, colorMode, focusedGid, hiddenRoles, highlightCluster, hovered, palette, setSettings, sigma]);
 
 	useEffect(() => {
 		if (focus === null || !sigma.getGraph().hasNode(focus.gid)) return;
@@ -191,6 +303,19 @@ function Controller({ colorMode, focus, highlightCluster, onSelectNode }: Omit<G
 	}, [focus, sigma]);
 
 	useEffect(() => {
+		if (activePath === null) return;
+
+		const graph = sigma.getGraph();
+		const shown = [...activePath.hops.entries()]
+			.filter(([node, hop]) => hop <= activePath.revealedHop && graph.hasNode(node))
+			.map(([node]) => node);
+
+		fitCamera(sigma, { duration: 500, nodes: shown });
+	}, [activePath, sigma]);
+
+	useEffect(() => {
+		if (activePath !== null) return;
+
 		const camera = sigma.getCamera();
 
 		if (highlightCluster === null) {
@@ -216,7 +341,7 @@ function Controller({ colorMode, focus, highlightCluster, onSelectNode }: Omit<G
 
 		// Normalised coordinates span 0–1 at ratio 1, so a cluster of radius r fits at about 2.4r.
 		void camera.animate({ ratio: Math.min(1, Math.max(0.15, spread * 2.4)), x, y }, { duration: 600 });
-	}, [focusedGid, highlightCluster, sigma]);
+	}, [activePath, focusedGid, highlightCluster, sigma]);
 
 	return null;
 }
