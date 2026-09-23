@@ -37,19 +37,6 @@ export default defineConfig({
 					name: 'unit',
 				},
 			},
-			{
-				test: {
-					environment: 'node',
-					// One database, one worker. These tests assert on roles, extensions and
-					// eventually on data; running them concurrently against a shared database turns
-					// a real failure into an intermittent one.
-					fileParallelism: false,
-					globalSetup: ['./vitest.globalSetup.ts'],
-					hookTimeout: 30_000,
-					include: [INTEGRATION_GLOB],
-					name: 'integration',
-				},
-			},
 		],
 	},
 });

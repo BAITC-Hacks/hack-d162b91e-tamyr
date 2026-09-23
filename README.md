@@ -177,7 +177,7 @@ pnpm dev                      # http://localhost:3000
 calls the **real** tools through the real dispatcher, with no key and no network. It is the product
 with the model removed, not a stub of it — a tool that would refuse still refuses.
 
-The remaining variables in `.env.example` (hosted tools, the optional PostgreSQL database) are
+The remaining variables in `.env.example` (OpenAI hosted tools) are
 inherited from the starter template and are not used by this product.
 
 ## Checking the main scenario
@@ -516,8 +516,7 @@ follows the token rules), `src/shared/ui/rawControls.spec.ts` (no raw form contr
 | `pnpm verify`               | Typecheck and lint                                        |
 | `pnpm format`               | Prettier                                                  |
 
-The `db:*` scripts and `test:integration` belong to the optional PostgreSQL database inherited from
-the starter; this product does not use a database.
+The product uses no database: the starter's optional PostgreSQL/Prisma layer was removed.
 
 ## Team
 
@@ -567,9 +566,8 @@ uses no model at all.
 | `openai`                                   | OpenAI API client                          | Apache-2.0   |
 | `dotenv`                                   | Loading `.env`                             | BSD-2-Clause |
 | `server-only`                              | Server/client boundary guard               | MIT          |
-| `@prisma/client`, `@prisma/adapter-pg`     | Optional database layer of the starter; not used by this product (no `DATABASE_URL` needed), kept because the template's install step and tests depend on it | Apache-2.0 |
 
-Development tooling — TypeScript, ESLint and its plugins, Prettier, Vitest, tsx, Prisma CLI — each
+Development tooling — TypeScript, ESLint and its plugins, Prettier, Vitest, tsx — each
 under its own licence, listed in `package.json`.
 
 The graph algorithms that are not from a library — PageRank, HITS, Brandes betweenness,
