@@ -54,10 +54,10 @@ export function Legend({ clusters, colorMode, nodes }: LegendProps) {
 	return (
 		<ul aria-label="Легенда: роли" className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs sm:grid-cols-3">
 			{ROLE_ORDER.map((role) => (
-				<li className="flex min-w-0 items-baseline gap-1.5" key={role}>
+				<li className="flex min-w-0 flex-wrap items-baseline gap-x-1.5" key={role}>
 					<RoleTag className="text-fg" role={role} />
 					<span className="text-fg-muted tabular">{formatInteger(counts.get(role) ?? 0)}</span>
-					<span className="text-fg-subtle hidden truncate xl:inline">· {ROLE_HINTS[role]}</span>
+					<span className="text-fg-subtle">· {ROLE_HINTS[role]}</span>
 				</li>
 			))}
 		</ul>

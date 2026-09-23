@@ -32,7 +32,9 @@ export function TopList({ onSelect, rows }: { onSelect: (gid: string) => void; r
 							<div className="flex flex-col gap-1">
 								<GidButton gid={row.gid} onSelect={onSelect} />
 								<RoleTag className="text-fg text-xs" role={row.role} />
-								<p className="text-fg-muted text-xs">{row.why}</p>
+								<p className="text-fg-muted line-clamp-2 text-xs" title={row.why}>
+									{row.why}
+								</p>
 							</div>
 						</Td>
 						<Td className="tabular text-right align-top">{formatScore(row.priorityScore)}</Td>

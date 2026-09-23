@@ -50,3 +50,10 @@ export function formatDate(iso: string): string {
 
 	return `${day}.${month}.${year}`;
 }
+
+/** Two ISO dates → «01.07–31.07.2026» within one year, the full pair otherwise. Fits a stats cell. */
+export function formatPeriod(from: string, to: string): string {
+	if (from.slice(0, 4) !== to.slice(0, 4)) return `${formatDate(from)} – ${formatDate(to)}`;
+
+	return `${formatDate(from).slice(0, 5)}–${formatDate(to)}`;
+}
