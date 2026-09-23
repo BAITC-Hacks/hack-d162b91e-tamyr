@@ -73,6 +73,19 @@ function topCount(question: string): number {
 	return asked === undefined ? DEFAULT_SOURCES : Math.min(20, Math.max(1, Number(asked)));
 }
 
+/** Stems, so «распределителей», «распределители» and «распределитель» all match. */
+const ROLE_STEMS: readonly [RegExp, Role][] = [
+	[/распредел/u, 'distributor'],
+	[/консолид/u, 'consolidator'],
+	[/транзит/u, 'transit'],
+	[/координ/u, 'coordinator'],
+	[/конечн|терминал/u, 'terminal'],
+];
+
+function roleIn(question: string): Role | undefined {
+	return ROLE_STEMS.find(([stem]) => stem.test(question))?.[1];
+}
+
 const NOT_UNDERSTOOD =
 	'Сценарный режим, модель не подключена: этот вопрос я не распознал. Попробуйте один из демо-вопросов:\n' +
 	'- «Кого проверять первым и почему?»\n' +
@@ -125,9 +138,19 @@ function lastUserText(messages: readonly ChatMessage[]): string {
  * failing that, the top of the priority list — fetched through the tool, so it shows in the panel.
  */
 function sources(turn: Turn, messages: readonly ChatMessage[]): ChatResponse | string[] {
-	const named = gidsIn(lastUserText(messages));
+	const text = lastUserText(messages).toLowerCase();
+	const named = gidsIn(text);
 
 	if (named.length >= 2) return named.slice(0, 20);
+
+	// «с топ-5 распределителей»: the question names a role, so the sources are that role's top.
+	const role = roleIn(text);
+
+	if (role !== undefined) {
+		const top = turn.call('get_top_nodes', { limit: topCount(text), role });
+
+		return turn.problem(top) ?? (top.result as { rows: TopRow[] }).rows.map((row) => row.gid);
+	}
 
 	const earlier = messages
 		.slice(0, -1)
@@ -203,8 +226,8 @@ function collectorsTurn(turn: Turn, messages: readonly ChatMessage[]): ChatRespo
 		);
 
 	return turn.reply(
-		`Кто собирает деньги с ${from.length} узлов: в пределах ${maxHops} переводов общих получателей ${grouped(total)}, ` +
-			`крупнейшие — признаки консолидации, стоит проверить:\n` +
+		`Кто собирает деньги с ${from.length} узлов (${from.join(', ')}): в пределах ${maxHops} переводов ` +
+			`общих получателей — ${grouped(total)}. Где сходятся деньги нескольких источников, стоит проверить:\n` +
 			`${lines.join('\n')}\n\n${FOOTER}`,
 	);
 }

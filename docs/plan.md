@@ -338,6 +338,19 @@ A change someone needs in a path they do not own. Newest last.
   - **English leftovers** in the registry and the loop are now Russian. `totalMatching` is 2 248.
   - **Also changed:** `find_collectors` defaults to 2 hops instead of 3. On the real data, 3 hops
     gave 581 shared receivers for the top five; 2 gives 194.
+- *(16:30 — Бекжан → Ораз, after `ac867a1`)* The pipeline was re-run on Саян's calibrated rules and
+  the outputs are committed. Roles: 1 798 peripheral, 219 terminal, 94 consolidator, 68 transit,
+  53 distributor, 16 coordinator. The blockers hold: role_score is spread out, there are 0
+  consolidators with pass-through ≥ 0.5 and 0 coordinators with outDeg < 3, and peripheral
+  evidence names the threshold it missed. Three random gids each read in one sentence.
+  **Change the demo's second question.** The top five are now mostly consolidators (money sinks),
+  so «Кто собирает деньги с этих пятерых?» honestly finds one shared receiver, a peripheral, at any
+  depth. **«Кто собирает деньги с топ-5 распределителей?»** finds 136. The first rows are two
+  distributors, a coordinator and a consolidator, each fed by 4 of the 5. Both mock and live answer
+  it: the mock reads the role from the question. Suggest swapping it into the chips
+  (`widgets/assistant/model/suggestions.ts`), the README and the demo script. Also: the tab title
+  is still «Agent Starter», and `why` still says «betweenness», which should be «посредничество»
+  (Саян, `priority.ts`).
 - *(16:05 — Ораз → Саян, add to the blockers)* **`findCollectors` over-counts KZT**
   (`queries.ts`). The same incoming edges are summed once for every source that reaches the node.
   The mock shows `100000001330685100` collecting 4 637 878 KZT, but it received 2 435 923 in total.

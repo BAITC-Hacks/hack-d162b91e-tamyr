@@ -105,6 +105,15 @@ describe('the scripted agent', () => {
 		expect(result.reply).toContain('компонент');
 	});
 
+	it('takes the sources from the role the question names: «с топ-5 распределителей»', async () => {
+		const result = await ask('Кто собирает деньги с топ-5 распределителей?');
+
+		expect(result.toolCalls[0]).toMatchObject({
+			arguments: { limit: 5, role: 'distributor' },
+			name: 'get_top_nodes',
+		});
+	});
+
 	it('removes as many as «топ-N» says, not always five', async () => {
 		const result = await ask('Что если убрать топ-10?');
 

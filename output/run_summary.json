@@ -1,0 +1,35 @@
+{
+	"counts": {
+		"clusters": 84,
+		"edges": 3119,
+		"nodes": 2248,
+		"seeds": 81,
+		"top": 50,
+		"transactions": 4840
+	},
+	"durationsMs": {
+		"read": 101,
+		"analyze": 7501,
+		"write": 37,
+		"total": 7675
+	},
+	"finishedAt": "2026-09-23T11:24:38.995Z",
+	"inputs": {
+		"nodes.parquet": "d2a45b0df6e9352832d5fb09839d10b9e23f898156c3bab263b051b31cc0296d",
+		"edges.parquet": "4e71dde5cd3115bcb26e91202665532ee6581cf8233a9fc8059ea59fb7358a38",
+		"transactions.parquet": "c30c5317b5439591dde86f2058dc47a3d19b2900c055ded994fe547f6fb7e7da"
+	},
+	"roles": {
+		"distributor": 53,
+		"peripheral": 1798,
+		"coordinator": 16,
+		"consolidator": 94,
+		"terminal": 219,
+		"transit": 68
+	},
+	"warnings": [
+		"19 seed(s) appear in no edge; they stay in the output as isolated nodes.",
+		"377 node(s) send more than they are observed to receive: transfers from outside the sample are not in the data, so pass-through is unreliable for them.",
+		"444 node(s) at depth 4 with no outgoing transfers: the traversal stopped there, the money may not have. Never 'terminal'."
+	]
+}
