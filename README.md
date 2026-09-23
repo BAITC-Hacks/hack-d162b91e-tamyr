@@ -86,7 +86,7 @@ pnpm dev                      # http://localhost:3000
 
 - **Ораз Исабеков** — контракт данных, интерфейс, README
 - **Бекжан** — пайплайн, инструменты агента
-- **Саян** — алгоритм: метрики, роли, кластеры, приоритет
+- **Саян Кареев** — алгоритм: метрики, роли, кластеры, приоритет
 
 Проект начат с заранее подготовленного шаблона без функциональности по задаче — см.
 [раскрытие сторонних компонентов](#third-party-components-and-prior-work).
@@ -467,7 +467,7 @@ the starter; this product does not use a database.
 | --------------- | ------------------------------------------------------------- |
 | Ораз Исабеков   | Data contract, interface, README                              |
 | Бекжан          | Pipeline, agent tools, prompt                                 |
-| Саян            | Algorithm: metrics, roles, clusters, priority, queries        |
+| Саян Кареев     | Algorithm: metrics, roles, clusters, priority, queries        |
 
 ## Third-party components and prior work
 
