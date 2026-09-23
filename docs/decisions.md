@@ -57,3 +57,24 @@ function tool correctly on the first try with 0 reasoning tokens. A demo turn of
 ~1k output tokens costs about $0.002. Chosen over: `gpt-5.6-luna` (2× the price, spends reasoning
 tokens), `gpt-5-mini` (6× the reasoning tokens) and `gpt-6-sol` (20× the price; the fallback only
 if luna's answers are weak). `.env.example` stays on `mock` for reviewers.
+
+**15:15 — CSV conventions (Бекжан, `graph/repo/outputs.ts`).**
+The ТЗ's columns come first and in its order; our metrics follow them (the organiser's README
+permits extra columns). Gids are plain digits, booleans `true`/`false`, a missing value an empty
+cell, lists (`top_gids`, `flags`) joined with `;`. LF, UTF-8, no BOM — what pandas reads without
+options. Chosen over: a JSON array in `top_gids`, which needs quoting and a second parser.
+
+**15:15 — The top list holds 50 rows, not 20.**
+The ТЗ asks for ≥ 20; `get_top_nodes` accepts `limit` up to 50 and serves it from `analysis.top`
+without re-ranking. `TOP_LIMIT` in `graph/usecase/analyze.ts`.
+
+**15:15 — `readAnalysis` returns `null` for a missing file and throws for an invalid one.**
+Missing means "the pipeline has not run" — an empty state. Invalid means a bug — an error state
+with the first issues named. Folding both into `null` would send someone to re-run a pipeline that
+is not what is broken. The pipeline reads its own output back through the same function, so a
+file the app cannot load fails the run, not the demo.
+
+**15:15 — Layout: ForceAtlas2, 300 iterations, from a circle in gid order.**
+Deterministic (identical `analysis.json` hash across runs), about 4 s of the pipeline's 4.4 s.
+Edge weight is `log10(1 + sumKzt)` so one 3M transfer does not fold the picture. Chosen over: fewer
+iterations (a looser picture) and a random start (a different picture on every run).

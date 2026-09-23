@@ -297,6 +297,12 @@ A change someone needs in a path they do not own. Newest last.
   `"predev": "pnpm pipeline"` and `"prebuild": "pnpm pipeline"` to `package.json`. They are not
   added yet because the pipeline does not exist, and adding them now would break `pnpm dev` for
   everyone.
+- *(15:20 — Бекжан → Ораз)* `pnpm pipeline` works end to end on the real data: 2 248 rows, 50 top
+  rows, 4.4 s, deterministic layout, gate green. **Add `predev` and `prebuild` now.** The page's
+  entry point is `getAnalysis(ctx)` in `graph/usecase/getAnalysis.ts`; `null` means "run
+  `pnpm pipeline`", a throw means the file is broken (show its message). Roles are all
+  `peripheral` and there is one cluster until Саян's rules land — the wiring is real, the numbers
+  are stubs.
 - *(14:22 — Саян → Ораз: freeze the product domain/schema and repo signatures in this plan; provide
   `edges.parquet`, `nodes.parquet`, `transactions.parquet`, and the dataset README. The analytics
   specification is ready in `src/server/aml/data/ANALYTICS.md`; implementation and calibrated

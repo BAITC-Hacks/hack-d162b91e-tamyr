@@ -2,6 +2,7 @@ import { type Analysis, analysisSchema } from '@server/graph/model/graph.schema'
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import 'server-only';
+import { type ZodError } from 'zod';
 
 /**
  * Reads the finished analysis that `pnpm pipeline` wrote.
@@ -26,7 +27,24 @@ import 'server-only';
  * export directory and it is gitignored, while the CSVs are a required artifact.
  */
 export const OUTPUT_DIR = 'output';
+
+/** Written by `writeOutputs` in `./outputs.ts`, which spells the same name: a repo may not import a sibling repo. */
 export const ANALYSIS_FILE = 'analysis.json';
+
+/**
+ * A zod failure as a readable error: the first few issues with their paths, then what to do.
+ * Shared by the reader here and by `analyze`, so a contract violation reads the same wherever it
+ * is caught.
+ */
+export function contractError(error: ZodError, subject: string): Error {
+	const problems = error.issues
+		.slice(0, 5)
+		.map((issue) => `  ${issue.path.join('.') || '(root)'}: ${issue.message}`)
+		.join('\n');
+	const more = error.issues.length > 5 ? `\n  …and ${error.issues.length - 5} more` : '';
+
+	return new Error(`${subject} does not match the analysis contract:\n${problems}${more}`);
+}
 
 interface CachedAnalysis {
 	analysis: Analysis;
@@ -58,12 +76,7 @@ export function readAnalysis(outDir: string): Analysis | null {
 	const result = analysisSchema.safeParse(parsed);
 
 	if (!result.success) {
-		const problems = result.error.issues
-			.slice(0, 5)
-			.map((issue) => `  ${issue.path.join('.') || '(root)'}: ${issue.message}`)
-			.join('\n');
-
-		throw new Error(`${path} does not match the analysis contract:\n${problems}\nRe-run \`pnpm pipeline\`.`);
+		throw contractError(result.error, `${path} (re-run \`pnpm pipeline\`)`);
 	}
 
 	cached = { analysis: result.data, mtimeMs, path };
