@@ -308,6 +308,28 @@ A change someone needs in a path they do not own. Newest last.
 - *(15:35 — Ораз, done)* `predev`/`prebuild` added; `/` renders `getAnalysis(createCtx())` with an
   error state for a broken file. Checked on the real data in headless Edge: 2 248 nodes drawn in
   1.4 s, gid search opens the card, no console errors.
+- *(16:05 — Ораз → Бекжан, review of `c1ea0c8`)* Good. The gate is green, the 7 tools match the
+  contract, refusals come back instead of throws, gids are strings, results are ≤ 14 KB, and both
+  mock and live answer through real tool calls. Fix these for the demo:
+  1. **Prompt:**
+     - Role names in Russian: the live reply wrote «distributor».
+     - Round metrics to 2 decimals: it printed `passThrough 2.7437165025037142`. Either allow
+       rounding in the prompt or round in the tool results.
+     - For «кого первым», call `get_top_nodes` plus `get_node` for #1 only. The live answer took
+       19.4 s with 6 tool calls.
+     - (Markdown `**bold**` is fine: Ораз now renders it in the widget.)
+  2. **Mock default branch:** an unrelated question («какая погода?») silently returns the top-5.
+     Make it say it did not understand and offer the three demo questions.
+  3. The prompt hard-codes "81 seeds / 2 248 nodes / July 2026". Fill these in from
+     `analysis.stats`.
+  4. Nice to have:
+     - English leftovers: «Check the clock», "I could not finish", "There is no tool named…".
+     - «убрать топ-10» still removes 5.
+     - `totalMatching` says 50, not 2 248.
+- *(16:05 — Ораз → Саян, add to the blockers)* **`findCollectors` over-counts KZT**
+  (`queries.ts`). The same incoming edges are summed once for every source that reaches the node.
+  The mock shows `100000001330685100` collecting 4 637 878 KZT, but it received 2 435 923 in total.
+  Count each edge once per collector.
 - *(15:55 — Ораз → Саян, review of `1977adf`)* It builds cleanly and the traps hold: 0 truncated
   nodes are terminal, transit excludes seeds, and no seed is in the top 50. **Three blockers must be
   fixed by 16:45**, because the jury's three-gid defence fails on them:

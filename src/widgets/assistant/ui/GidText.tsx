@@ -1,4 +1,5 @@
 import { splitGids } from '../lib/gids';
+import { inlineMarkdown } from '../lib/inlineMarkdown';
 
 /**
  * One gid as a link-styled button. A button, not an anchor: it focuses a node on the graph, it
@@ -23,7 +24,7 @@ export function GidButton({ gid, onGidClick }: { gid: string; onGidClick: (gid: 
  * Text with every gid in it made clickable — or left as plain text when there is nothing to call.
  * Without `onGidClick` a gid that looks like a link but does nothing would be a small lie.
  */
-export function GidText({ onGidClick, text }: { onGidClick?: (gid: string) => void; text: string }) {
+function Gids({ onGidClick, text }: { onGidClick?: (gid: string) => void; text: string }) {
 	if (onGidClick === undefined) return text;
 
 	return splitGids(text).map((segment, index) =>
@@ -33,4 +34,21 @@ export function GidText({ onGidClick, text }: { onGidClick?: (gid: string) => vo
 			<span key={`text-${String(index)}`}>{segment.text}</span>
 		),
 	);
+}
+
+/** Bold and headings from the model's Markdown first, then gids inside each piece. */
+export function GidText({ onGidClick, text }: { onGidClick?: (gid: string) => void; text: string }) {
+	return inlineMarkdown(text).map((segment, index) => {
+		const key = `md-${String(index)}`;
+
+		return segment.strong ? (
+			<strong className="font-semibold" key={key}>
+				<Gids onGidClick={onGidClick} text={segment.text} />
+			</strong>
+		) : (
+			<span key={key}>
+				<Gids onGidClick={onGidClick} text={segment.text} />
+			</span>
+		);
+	});
 }
