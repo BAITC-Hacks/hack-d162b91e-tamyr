@@ -300,6 +300,23 @@ For scale, on this data: 51 nodes have `in_deg` ≥ 5; 64 have `out_deg` ≥ 10;
 depth < 4, of which 219 clear the terminal threshold. The role counts of every run are in
 `output/run_summary.json`.
 
+### Anomaly flags
+
+Flags sit beside the role and never change it, its score or the priority. They show as badges on
+the node card and in the `flags` column of `nodes_roles.csv` (`src/server/graph/model/anomalies.ts`,
+thresholds also exported in `analysis.json`):
+
+| Flag | Rule | Nodes |
+| --- | --- | --- |
+| `split` (дробление сумм) | one sender made ≥ 3 transfers to the node on the same day, all within ±10% of their median | 6 |
+| `sync_inflow` (синхронный приход) | on some day the node received from ≥ 3 distinct payers | 38 |
+| `cycle` (возвратный поток) | the node lies on a directed cycle of length ≤ 6 — money comes back | 303 |
+| `fast_transit` (быстрый транзит) | ≥ 50% of outgoing KZT left within 2 days of an incoming transfer | 275 |
+| `truncated` | depth 4 with no outgoing transfers (see Roles) | 444 |
+
+Splitting below the 5 000 KZT extraction threshold is invisible in this data, so `split` can only
+under-count.
+
 ### Clusters
 
 Louvain community detection (`graphology-communities-louvain`) on the **undirected** projection,
