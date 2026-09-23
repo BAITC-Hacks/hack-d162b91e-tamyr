@@ -1,4 +1,4 @@
-import { ChatBubbleLeftRightIcon, SwatchIcon } from '@heroicons/react/24/outline';
+import { ChatBubbleLeftRightIcon } from '@heroicons/react/24/outline';
 import { GraphScreen } from '@pages/graph';
 import { type Analysis } from '@server/graph/model/graph.schema';
 import { getAnalysis } from '@server/graph/usecase/getAnalysis';
@@ -19,7 +19,6 @@ import { AppShell, type NavigationSection } from '@widgets/appShell';
  */
 const SECTIONS: readonly NavigationSection[] = [
 	{ href: '/', Icon: ChatBubbleLeftRightIcon, label: 'Граф и ассистент' },
-	{ href: '/design', Icon: SwatchIcon, label: 'Дизайн-система' },
 ];
 
 type Loaded = { analysis: Analysis | null; kind: 'ok' } | { kind: 'error'; message: string };

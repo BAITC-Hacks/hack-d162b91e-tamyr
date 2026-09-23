@@ -5,8 +5,8 @@ import { type ReactNode } from 'react';
 import './globals.css';
 
 export const metadata: Metadata = {
-	description: 'An agent that picks its own tools and shows its work',
-	title: 'Agent Starter',
+	description: 'Кого из клиентов сети проверять первым и почему: роли, кластеры и приоритеты по графу переводов',
+	title: 'Граф денег',
 };
 
 /**
@@ -35,7 +35,7 @@ const inter = Inter({
 
 export default function RootLayout({ children }: { children: ReactNode }) {
 	return (
-		<html className={inter.variable} lang="en" suppressHydrationWarning>
+		<html className={inter.variable} lang="ru" suppressHydrationWarning>
 			<head>
 				{/* eslint-disable-next-line react/no-danger -- must run before first paint or the page flashes */}
 				<script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />

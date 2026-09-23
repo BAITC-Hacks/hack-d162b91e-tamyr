@@ -17,6 +17,13 @@ describe('inlineMarkdown', () => {
 		]);
 	});
 
+	it('drops inline-code backticks around a gid, inside bold too', () => {
+		expect(inlineMarkdown('**Первым `100000000331309100`**.')).toEqual([
+			{ strong: true, text: 'Первым 100000000331309100' },
+			{ strong: false, text: '.' },
+		]);
+	});
+
 	it('leaves text without markup as one plain segment', () => {
 		expect(inlineMarkdown('1. первый\n2. второй')).toEqual([{ strong: false, text: '1. первый\n2. второй' }]);
 	});

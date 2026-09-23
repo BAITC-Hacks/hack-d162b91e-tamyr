@@ -87,22 +87,25 @@ export function Assistant({ className, compact = false, onGidClick, prefill }: A
 			)}
 
 			<div className="border-border flex flex-col gap-2 border-t pt-3">
-				<div aria-label="Примеры вопросов" className="flex flex-wrap gap-1.5" role="group">
-					{SUGGESTIONS.map((suggestion) => (
-						<Button
-							className="h-auto min-h-8 py-1 text-left whitespace-normal"
-							disabled={pending}
-							key={suggestion}
-							onClick={() => {
-								fill(suggestion);
-							}}
-							size="sm"
-							variant="secondary"
-						>
-							{suggestion}
-						</Button>
-					))}
-				</div>
+				{/* Examples are for an empty conversation; once it has started they only steal height. */}
+				{messages.length === 0 && (
+					<div aria-label="Примеры вопросов" className="flex flex-wrap gap-1.5" role="group">
+						{SUGGESTIONS.map((suggestion) => (
+							<Button
+								className="h-auto min-h-8 py-1 text-left whitespace-normal"
+								disabled={pending}
+								key={suggestion}
+								onClick={() => {
+									fill(suggestion);
+								}}
+								size="sm"
+								variant="secondary"
+							>
+								{suggestion}
+							</Button>
+						))}
+					</div>
+				)}
 
 				<Composer
 					disabled={pending}

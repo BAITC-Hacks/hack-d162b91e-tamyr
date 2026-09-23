@@ -128,7 +128,9 @@ export interface AgentActivityProps {
 }
 
 export function AgentActivity({ className, collapsible = false, onGidClick, pending, toolCalls }: AgentActivityProps) {
-	const [open, setOpen] = useState(true);
+	// Folded by default in a side panel: open, it took half the column and squeezed the conversation
+	// to a few lines. The header keeps the call count, so the agent's work is one click away.
+	const [open, setOpen] = useState(false);
 	const titleId = useId();
 	const bodyId = useId();
 	const expanded = !collapsible || open;
@@ -140,7 +142,9 @@ export function AgentActivity({ className, collapsible = false, onGidClick, pend
 				<span className="text-fg block font-semibold" id={titleId}>
 					Действия ассистента
 				</span>
-				<span className="text-fg-muted block text-xs">Что он вызвал на последнем шаге</span>
+				<span className="text-fg-muted block text-xs">
+					{collapsible && !open ? 'Нажмите, чтобы увидеть вызовы инструментов' : 'Что он вызвал на последнем шаге'}
+				</span>
 			</span>
 			{toolCalls.length > 0 && <Badge>{toolCalls.length}</Badge>}
 		</>

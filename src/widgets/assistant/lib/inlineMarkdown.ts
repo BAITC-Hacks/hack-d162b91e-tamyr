@@ -14,9 +14,11 @@ export interface MarkdownSegment {
 
 const HEADING = /^#{1,6}\s+(.+)$/gm;
 const BOLD = /\*\*([^*\n]+)\*\*/g;
+/** Models wrap gids in backticks as inline code; the bubble has no code style, so drop the ticks. */
+const CODE = /`([^`\n]+)`/g;
 
 export function inlineMarkdown(source: string): MarkdownSegment[] {
-	const text = source.replace(HEADING, '**$1**');
+	const text = source.replace(HEADING, '**$1**').replace(CODE, '$1');
 	const segments: MarkdownSegment[] = [];
 	let last = 0;
 

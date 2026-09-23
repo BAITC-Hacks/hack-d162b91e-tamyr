@@ -1,10 +1,10 @@
 import { type ClusterRow, type TopRow } from '@server/graph/model/graph.schema';
 import { Button } from '@shared/ui/Button';
-import { Table, TableHead, Td, Th, Tr } from '@shared/ui/Table';
 import clsx from 'clsx';
 import {
 	formatInteger,
 	formatKzt,
+	formatKztCompact,
 	formatScore,
 	PRIORITY_BAR_CLASS,
 	PRIORITY_TEXT_CLASS,
@@ -104,40 +104,38 @@ export function ClusterList({ highlighted, onSelect, rows }: ClusterListProps) {
 		return <p className="text-fg-muted text-sm">Кластеры не найдены. Перезапустите `pnpm pipeline`.</p>;
 	}
 
+	// A list, not a table: the side panel is ~22rem, and three columns pushed the amount out of view.
 	return (
-		<Table label="Кластеры">
-			<TableHead>
-				<Th>Кластер</Th>
-				<Th className="text-right">Узлов / seed</Th>
-				<Th className="text-right">Внутри, ₸</Th>
-			</TableHead>
-			<tbody>
-				{rows.map((row) => {
-					const active = row.clusterId === highlighted;
+		<ul aria-label="Кластеры" className="flex flex-col gap-2">
+			{rows.map((row) => {
+				const active = row.clusterId === highlighted;
 
-					return (
-						<Tr className={clsx(active && 'bg-accent-subtle')} key={row.clusterId}>
-							<Td className="align-top">
-								<div className="flex flex-col items-start gap-1">
-									<Button
-										aria-pressed={active}
-										onClick={() => onSelect(row.clusterId)}
-										size="sm"
-										variant={active ? 'primary' : 'secondary'}
-									>
-										Кластер {row.clusterId}
-									</Button>
-									<p className="text-fg-muted text-xs">{row.hypothesis}</p>
-								</div>
-							</Td>
-							<Td className="tabular text-right align-top whitespace-nowrap">
-								{formatInteger(row.nNodes)} / {formatInteger(row.nSeed)}
-							</Td>
-							<Td className="tabular text-right align-top whitespace-nowrap">{formatKzt(row.sumKztInternal)}</Td>
-						</Tr>
-					);
-				})}
-			</tbody>
-		</Table>
+				return (
+					<li
+						className={clsx(
+							'border-border flex flex-col gap-1.5 rounded-md border p-2.5',
+							active && 'border-accent bg-accent-subtle',
+						)}
+						key={row.clusterId}
+					>
+						<div className="flex flex-wrap items-center justify-between gap-2">
+							<Button
+								aria-pressed={active}
+								onClick={() => onSelect(row.clusterId)}
+								size="sm"
+								variant={active ? 'primary' : 'secondary'}
+							>
+								Кластер {row.clusterId}
+							</Button>
+							<span className="text-fg-muted tabular text-xs" title={formatKzt(row.sumKztInternal)}>
+								{formatInteger(row.nNodes)} узл. · {formatInteger(row.nSeed)} seed ·{' '}
+								<span className="text-fg font-medium">{formatKztCompact(row.sumKztInternal)}</span> внутри
+							</span>
+						</div>
+						<p className="text-fg-muted text-xs">{row.hypothesis}</p>
+					</li>
+				);
+			})}
+		</ul>
 	);
 }

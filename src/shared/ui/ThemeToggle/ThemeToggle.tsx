@@ -48,9 +48,9 @@ function apply(next: Theme): void {
 }
 
 const OPTIONS: { label: string; value: Theme }[] = [
-	{ label: 'Light', value: 'light' },
-	{ label: 'Dark', value: 'dark' },
-	{ label: 'System', value: 'system' },
+	{ label: 'Светлая', value: 'light' },
+	{ label: 'Тёмная', value: 'dark' },
+	{ label: 'Системная', value: 'system' },
 ];
 
 export function ThemeToggle() {
@@ -58,7 +58,7 @@ export function ThemeToggle() {
 
 	return (
 		<div
-			aria-label="Colour theme"
+			aria-label="Тема оформления"
 			className="border-border bg-surface inline-flex rounded-md border p-0.5"
 			role="radiogroup"
 		>
