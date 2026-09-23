@@ -1,8 +1,10 @@
+import { ANOMALY_THRESHOLDS, detectAnomalies } from '@server/graph/model/anomalies';
 import { type NodeMetrics, type RawGraph, type RoleVerdict } from '@server/graph/model/graph.schema';
 import 'server-only';
 
 /** Every numeric constant used by the role rules; also exported into analysis.json. */
 export const ROLE_THRESHOLDS: Record<string, number> = {
+	...ANOMALY_THRESHOLDS,
 	consolidatorMaxPassThrough: 0.5,
 	consolidatorMinInDeg: 5,
 	consolidatorSeedMinInDeg: 3,
@@ -257,6 +259,11 @@ export function assignRoles(raw: RawGraph, metrics: Map<string, NodeMetrics>): M
 			role: 'peripheral',
 			roleScore: clearance(metric.inDeg + metric.outDeg, ROLE_THRESHOLDS.transitMaxDegree!),
 		});
+	}
+
+	for (const [gid, anomalyFlags] of detectAnomalies(raw)) {
+		const verdict = verdicts.get(gid);
+		if (verdict) verdict.flags = [...new Set([...verdict.flags, ...anomalyFlags])];
 	}
 
 	return verdicts;
