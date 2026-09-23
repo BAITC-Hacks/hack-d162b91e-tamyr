@@ -39,10 +39,10 @@ describe('toCsv', () => {
 		);
 	});
 
-	it('writes a list as one cell joined with semicolons, so a list never needs a nested delimiter', () => {
+	it('writes a list as one cell joined with |, the separator the plan fixes for top_gids', () => {
 		const csv = toCsv(COLUMNS, [{ flags: ['seed', 'truncated'], gid: '1', note: '', ratio: 0, seed: true }]);
 
-		expect(csv).toBe('gid,note,ratio,seed,flags\n1,,0,true,seed;truncated\n');
+		expect(csv).toBe('gid,note,ratio,seed,flags\n1,,0,true,seed|truncated\n');
 	});
 
 	it('writes a gid as plain digits, never in scientific notation', () => {

@@ -1,6 +1,6 @@
 /**
- * The pipeline: raw parquet in, the three CSVs and `analysis.json` out. One command, no manual
- * steps — must-have 1 of the ТЗ.
+ * The pipeline: raw parquet in, the three CSVs, `analysis.json` and `run_summary.json` out. One
+ * command, no manual steps — must-have 1 of the ТЗ.
  *
  *   pnpm pipeline
  *   pnpm tsx --conditions=react-server scripts/pipeline.ts --data ./data --out ./output
@@ -8,14 +8,17 @@
  * `--conditions=react-server` makes `import 'server-only'` resolve to its empty module outside
  * Next, so the same functions the application uses run here unchanged.
  *
- * It fails loudly — non-zero exit, the reason on stderr — when the result would not pass the
- * jury's mechanical check: a node count other than the dataset's, a top list shorter than 20, an
- * evidence string with no number in it, or a file the application cannot read back.
+ * It fails loudly — non-zero exit, the reason on stderr — when the input is inconsistent or the
+ * result would not pass the jury's mechanical check: a node count other than the dataset's, a top
+ * list shorter than 20, an evidence string with no number in it, or a file the application cannot
+ * read back. The dataset's declared quirks (truncation, isolated seeds, seeds' under-reported
+ * inflow) are printed as warnings and recorded in the run summary, never fatal.
  */
 import { readAnalysis } from '@server/graph/repo/analysis';
-import { writeOutputs } from '@server/graph/repo/outputs';
-import { readRawGraph } from '@server/graph/repo/parquet';
+import { type RunSummary, writeOutputs, writeRunSummary } from '@server/graph/repo/outputs';
+import { auditRawGraph, hashInputs, readRawGraph } from '@server/graph/repo/parquet';
 import { analyze } from '@server/graph/usecase/analyze';
+import { createCtx } from '@server/kernel/ctx';
 import { resolve } from 'node:path';
 
 /** The ТЗ dataset. Another dataset is run with `--expect-nodes <n>`. */
@@ -35,7 +38,7 @@ function check(condition: boolean, message: string): void {
 
 const fmt = new Intl.NumberFormat('ru-RU');
 const n = (value: number): string => fmt.format(value);
-const ms = (from: number): string => `${n(Math.round(performance.now() - from))} мс`;
+const since = (from: number): number => Math.round(performance.now() - from);
 
 function line(text = ''): void {
 	process.stdout.write(`${text}\n`);
@@ -46,6 +49,7 @@ async function main(): Promise<void> {
 	const outDir = resolve(argument('--out', './output'));
 	const expectedNodes = Number(argument('--expect-nodes', String(DEFAULT_EXPECTED_NODES)));
 	const started = performance.now();
+	const durationsMs: Record<string, number> = {};
 
 	line(`Граф денег — пайплайн`);
 	line(`  данные:    ${dataDir}`);
@@ -53,21 +57,32 @@ async function main(): Promise<void> {
 	line();
 
 	let t = performance.now();
+	const inputs = hashInputs(dataDir);
 	const raw = await readRawGraph(dataDir);
+	const { warnings } = auditRawGraph(raw);
 
-	line(`1. Чтение parquet — ${ms(t)}`);
+	durationsMs.read = since(t);
+	line(`1. Чтение и проверка parquet — ${n(durationsMs.read)} мс`);
 	line(`   узлов ${n(raw.nodes.length)}, рёбер ${n(raw.edges.length)}, транзакций ${n(raw.transactions.length)}`);
+
+	for (const [file, hash] of Object.entries(inputs)) line(`   sha256 ${file.padEnd(20)} ${hash}`);
+
+	if (warnings.length > 0) {
+		line(`   особенности данных (учтены, не ошибки):`);
+		for (const warning of warnings) line(`   ! ${warning}`);
+	}
 
 	t = performance.now();
 	const analysis = analyze(raw);
 
-	line(`2. Метрики, роли, кластеры, укладка, приоритеты — ${ms(t)}`);
+	durationsMs.analyze = since(t);
+	line(`2. Метрики, роли, кластеры, укладка, приоритеты — ${n(durationsMs.analyze)} мс`);
 
-	const byRole = new Map<string, number>();
+	const roles: Record<string, number> = {};
 
-	for (const node of analysis.nodes) byRole.set(node.role, (byRole.get(node.role) ?? 0) + 1);
+	for (const node of analysis.nodes) roles[node.role] = (roles[node.role] ?? 0) + 1;
 
-	for (const [role, count] of [...byRole.entries()].sort((a, b) => b[1] - a[1])) {
+	for (const [role, count] of Object.entries(roles).sort((a, b) => b[1] - a[1])) {
 		line(`   ${role.padEnd(13)} ${String(count).padStart(5)}`);
 	}
 
@@ -79,14 +94,15 @@ async function main(): Promise<void> {
 
 	t = performance.now();
 	writeOutputs(outDir, analysis);
-	line(`3. Запись nodes_roles.csv, clusters.csv, top_nodes.csv, analysis.json — ${ms(t)}`);
+	durationsMs.write = since(t);
+	line(`3. Запись nodes_roles.csv, clusters.csv, top_nodes.csv, analysis.json — ${n(durationsMs.write)} мс`);
 
 	// --- what the jury checks mechanically, checked here first ---------------------------------
 
 	check(
 		analysis.nodes.length === expectedNodes,
 		`nodes_roles.csv has ${n(analysis.nodes.length)} rows, expected ${n(expectedNodes)}. ` +
-			`Pass --expect-nodes ${n(analysis.nodes.length).replaceAll(/\s/g, '')} if this is a different dataset.`,
+			`Pass --expect-nodes ${analysis.nodes.length} if this is a different dataset.`,
 	);
 	check(
 		analysis.top.length >= MIN_TOP_ROWS,
@@ -115,9 +131,30 @@ async function main(): Promise<void> {
 
 	check(readBack !== null && readBack.nodes.length === analysis.nodes.length, 'analysis.json could not be read back.');
 
+	durationsMs.total = since(started);
+
+	const summary: RunSummary = {
+		counts: {
+			clusters: analysis.clusters.length,
+			edges: analysis.stats.edges,
+			nodes: analysis.stats.nodes,
+			seeds: analysis.stats.seeds,
+			top: analysis.top.length,
+			transactions: analysis.stats.transactions,
+		},
+		durationsMs,
+		finishedAt: createCtx().now.toISOString(),
+		inputs,
+		roles,
+		warnings,
+	};
+
+	writeRunSummary(outDir, summary);
+
 	line();
 	line(
-		`Готово за ${ms(started)}. Проверки пройдены: ${n(analysis.nodes.length)} узлов, топ ≥ ${MIN_TOP_ROWS}, evidence с числами.`,
+		`Готово за ${n(durationsMs.total)} мс. Проверки пройдены: ${n(analysis.nodes.length)} узлов, топ ≥ ${MIN_TOP_ROWS}, ` +
+			`evidence с числами, analysis.json читается. Сводка запуска: run_summary.json.`,
 	);
 }
 

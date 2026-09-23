@@ -302,7 +302,9 @@ A change someone needs in a path they do not own. Newest last.
   entry point is `getAnalysis(ctx)` in `graph/usecase/getAnalysis.ts`; `null` means "run
   `pnpm pipeline`", a throw means the file is broken (show its message). Roles are all
   `peripheral` and there is one cluster until Саян's rules land — the wiring is real, the numbers
-  are stubs.
+  are stubs. For the README: `top_gids` and `flags` are joined with `|` as you fixed at 15:25; the
+  pipeline also writes `output/run_summary.json` (SHA-256 of the inputs, timings, role counts and
+  the dataset warnings) — quote it in the limitations section instead of retyping the numbers.
 - *(14:22 — Саян → Ораз: freeze the product domain/schema and repo signatures in this plan; provide
   `edges.parquet`, `nodes.parquet`, `transactions.parquet`, and the dataset README. The analytics
   specification is ready in `src/server/aml/data/ANALYTICS.md`; implementation and calibrated

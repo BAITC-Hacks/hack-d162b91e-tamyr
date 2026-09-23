@@ -9,8 +9,9 @@ import 'server-only';
  * The CSV schemas are checked mechanically by the jury, so the required columns come first and in
  * the ТЗ's order; our own metrics follow them, which the organiser's README explicitly permits.
  * Gids are written as plain digits (the ТЗ types the column int64), booleans as `true`/`false`,
- * a missing value as an empty cell, and a list — `top_gids`, `flags` — joined with `;` so that a
- * cell never needs a nested delimiter.
+ * a missing value as an empty cell, and a list — `top_gids`, `flags` — joined with `|`, the
+ * separator the lead fixed in `docs/plan.md` (Requests, 15:25), so a cell never needs a nested
+ * delimiter.
  *
  * The JSON is the same `Analysis` object, verbatim. The reader in `./analysis.ts` validates it
  * against the contract on the way back in; `scripts/pipeline.ts` does that round trip once after
@@ -84,7 +85,7 @@ function quote(text: string): string {
 
 function cell(value: Cell): string {
 	if (value === null) return '';
-	if (Array.isArray(value)) return quote(value.join(';'));
+	if (Array.isArray(value)) return quote(value.join('|'));
 	if (typeof value === 'boolean') return value ? 'true' : 'false';
 	if (typeof value === 'number') return String(value);
 
@@ -106,4 +107,28 @@ export function writeOutputs(outDir: string, a: Analysis): void {
 	writeFileSync(join(outDir, CLUSTERS_FILE), toCsv(CLUSTER_COLUMNS, a.clusters));
 	writeFileSync(join(outDir, TOP_FILE), toCsv(TOP_COLUMNS, a.top));
 	writeFileSync(join(outDir, ANALYSIS_FILE), JSON.stringify(a));
+}
+
+// --- the run summary -----------------------------------------------------------------------------
+
+export const RUN_SUMMARY_FILE = 'run_summary.json';
+
+/**
+ * What one run did, beside the CSVs it produced: enough to reproduce it and to tell two runs apart.
+ * The input hashes are the reproducibility claim; the warnings are the dataset's declared quirks,
+ * recorded so the README's limitations section quotes the run rather than memory.
+ */
+export interface RunSummary {
+	counts: Record<string, number>;
+	durationsMs: Record<string, number>;
+	finishedAt: string;
+	/** SHA-256 of each input file, from `hashInputs`. */
+	inputs: Record<string, string>;
+	roles: Record<string, number>;
+	warnings: string[];
+}
+
+export function writeRunSummary(outDir: string, summary: RunSummary): void {
+	mkdirSync(outDir, { recursive: true });
+	writeFileSync(join(outDir, RUN_SUMMARY_FILE), `${JSON.stringify(summary, null, '\t')}\n`);
 }

@@ -61,8 +61,9 @@ if luna's answers are weak). `.env.example` stays on `mock` for reviewers.
 **15:15 — CSV conventions (Бекжан, `graph/repo/outputs.ts`).**
 The ТЗ's columns come first and in its order; our metrics follow them (the organiser's README
 permits extra columns). Gids are plain digits, booleans `true`/`false`, a missing value an empty
-cell, lists (`top_gids`, `flags`) joined with `;`. LF, UTF-8, no BOM — what pandas reads without
-options. Chosen over: a JSON array in `top_gids`, which needs quoting and a second parser.
+cell, lists (`top_gids`, `flags`) joined with `|` — the separator the lead fixed in the plan's
+Requests at 15:25. LF, UTF-8, no BOM — what pandas reads without options. Chosen over: a JSON
+array in `top_gids`, which needs quoting and a second parser.
 
 **15:15 — The top list holds 50 rows, not 20.**
 The ТЗ asks for ≥ 20; `get_top_nodes` accepts `limit` up to 50 and serves it from `analysis.top`
